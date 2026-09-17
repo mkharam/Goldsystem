@@ -20,9 +20,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # يفعّل GitHub Pages على المستودع تلقائياً إن لم يكن مفعّلاً، ويضبط مصدره
-      # على Actions — فلا يحتاج أحد لضبط شيء يدوياً قبل أول نشر.
+      # تفعيل Pages لأول مرة يحتاج صلاحية مالك المستودع، ولا يملكها توكن Actions
+      # (يردّ "Resource not accessible by integration")، فيُفعَّل مرة واحدة يدوياً من
+      # Settings ← Pages ← Source: GitHub Actions. بعدها ينجح هذا الشرط بلا تدخّل،
+      # ولا نريده أن يُسقط البناء قبل ذلك.
       - uses: actions/configure-pages@v5
+        continue-on-error: true
         with:
           enablement: true
 
