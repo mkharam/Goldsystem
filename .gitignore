@@ -14,3 +14,5 @@ next-env.d.ts
 *.pem
 npm-debug.log*
 yarn-error.log*
+
+supabase/.temp/

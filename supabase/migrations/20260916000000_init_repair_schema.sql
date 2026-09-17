@@ -241,6 +241,7 @@ $$;
 CREATE OR REPLACE FUNCTION public.touch_updated_at()
 RETURNS TRIGGER
 LANGUAGE plpgsql
+SET search_path = public
 AS $$
 BEGIN
   NEW.updated_at = now();
@@ -258,6 +259,7 @@ CREATE TRIGGER customers_touch BEFORE UPDATE ON public.customers
 CREATE OR REPLACE FUNCTION public.stamp_status_change()
 RETURNS TRIGGER
 LANGUAGE plpgsql
+SET search_path = public
 AS $$
 BEGIN
   IF NEW.status IS DISTINCT FROM OLD.status THEN
@@ -287,10 +289,17 @@ ALTER TABLE public.ticket_counters ENABLE ROW LEVEL SECURITY;
 
 -- لا سياسات = لا صفوف لأي دور غير service_role (الذي يتجاوز RLS أصلاً).
 REVOKE ALL ON ALL TABLES IN SCHEMA public FROM anon, authenticated;
-REVOKE ALL ON ALL FUNCTIONS IN SCHEMA public FROM anon, authenticated;
+
+-- الدوال تُسحب من PUBLIC لا من anon/authenticated فقط: Postgres يمنح EXECUTE لـ
+-- PUBLIC افتراضياً، والدوران يرثانه منه فيبقى السحب المباشر بلا أثر. بدون هذا
+-- يستطيع أي زائر استدعاء next_ticket_number عبر /rest/v1/rpc واستهلاك تسلسل
+-- التذاكر، وهي SECURITY DEFINER فتتجاوز RLS على ticket_counters.
+REVOKE ALL ON ALL FUNCTIONS IN SCHEMA public FROM PUBLIC;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;
 
 GRANT ALL ON ALL TABLES IN SCHEMA public TO service_role;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO service_role;
+GRANT ALL ON ALL FUNCTIONS IN SCHEMA public TO service_role;
 
 -- ---------------------------------------------------------------------
 -- تخزين الصور
