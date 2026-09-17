@@ -1,7 +1,7 @@
 import "server-only";
 import { createHmac, timingSafeEqual, randomBytes, scrypt as scryptCb } from "node:crypto";
 import { promisify } from "node:util";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import type { SessionStaff } from "./types";
 
 const scrypt = promisify(scryptCb) as (p: string, s: Buffer, k: number) => Promise<Buffer>;
@@ -22,6 +22,22 @@ function sign(payload: string): string {
 }
 
 /**
+ * هل يصل الطلب عبر HTTPS فعلاً؟
+ *
+ * نربط راية Secure بالبروتوكول الذي يراه المتصفح لا بـ NODE_ENV، لأن
+ * `next start` يعمل بوضع الإنتاج حتى على http محلياً فيحمل الكوكي راية Secure
+ * على اتصال غير مشفّر — تتسامح المتصفحات مع ذلك على localhost وحدها، فيبقى
+ * سلوكاً هشّاً يعتمد على استثناء. وخلف وكيل ينهي TLS قبل التطبيق يبقى Secure
+ * مطلوباً رغم أن التطبيق نفسه يرى http، وهو ما يكشفه x-forwarded-proto.
+ */
+async function isSecureRequest(): Promise<boolean> {
+  const h = await headers();
+  const forwarded = h.get("x-forwarded-proto");
+  if (forwarded) return forwarded.split(",")[0].trim() === "https";
+  return (process.env.NEXT_PUBLIC_APP_URL ?? "").startsWith("https://");
+}
+
+/**
  * جلسة موقّعة في كوكي — التطبيق لا يستخدم Supabase Auth لأن الموظفين موجودون
  * أصلاً في نظام المخزون، ولا نريد نسخ حساباتهم إلى مزوّد هوية ثانٍ.
  */
@@ -33,7 +49,7 @@ export async function createSession(staff: SessionStaff): Promise<void> {
   (await cookies()).set(COOKIE, token, {
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    secure: await isSecureRequest(),
     path: "/",
     maxAge: MAX_AGE_SECONDS,
   });
