@@ -61,8 +61,8 @@ export default function Tickets() {
                 to={`/tickets?status=${filter.key}${q ? `&q=${encodeURIComponent(q)}` : ""}`}
                 className={`whitespace-nowrap rounded-full border px-3 py-1.5 text-sm transition ${
                   active
-                    ? "border-gold-500 bg-gold-500 font-semibold text-white"
-                    : "border-slate-300 bg-white text-slate-600 hover:border-gold-300"
+                    ? "border-brand-700 bg-brand-700 font-semibold text-gold-100"
+                    : "border-slate-300 bg-white text-slate-600 hover:border-brand-300"
                 }`}
               >
                 {filter.label}

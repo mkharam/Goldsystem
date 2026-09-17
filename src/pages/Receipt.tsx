@@ -1,16 +1,14 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { getTicket, getSettings, type Settings } from "@/lib/tickets";
-import { qrSvg, trackingUrl } from "@/lib/qr";
 import { formatDateTime, formatWeight, formatMoney } from "@/lib/format";
+import { Logo } from "@/components/Logo";
 import type { TicketWithRelations } from "@/lib/types";
 
 export default function Receipt() {
   const { id } = useParams<{ id: string }>();
   const [ticket, setTicket] = useState<TicketWithRelations | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
-  const [qr, setQr] = useState("");
-  const [url, setUrl] = useState("");
 
   useEffect(() => {
     if (!id) return;
@@ -18,11 +16,6 @@ export default function Receipt() {
       const [t, s] = await Promise.all([getTicket(id), getSettings()]);
       setTicket(t);
       setSettings(s);
-      if (t) {
-        const link = trackingUrl(t.tracking_token);
-        setUrl(link);
-        setQr(await qrSvg(link, 150));
-      }
     })();
   }, [id]);
 
@@ -37,37 +30,36 @@ export default function Receipt() {
         <button type="button" onClick={() => window.print()} className="btn-primary flex-1">طباعة</button>
       </div>
 
-      <div className="card p-5 print:border-0 print:shadow-none">
-        <div className="text-center">
-          <h1 className="text-lg font-bold text-slate-900">{settings.shop_name}</h1>
-          <p className="text-sm text-slate-500">إيصال استلام صيانة</p>
+      <div className="card overflow-hidden print:border-0 print:shadow-none">
+        {/* ترويسة الهوية — تُطبع بالأسود على الطابعات الحرارية وتبقى مقروءة. */}
+        <div className="brand-surface px-5 py-4 text-center text-white print:bg-white print:text-brand-900">
+          <Logo size={52} className="mx-auto mb-2" />
+          <h1 className="text-lg font-bold text-gold-200 print:text-brand-900">{settings.shop_name}</h1>
+          <p className="text-xs text-gold-300/80 print:text-slate-600">إيصال استلام صيانة</p>
         </div>
 
-        <div className="my-4 border-y border-dashed border-slate-300 py-3 text-center">
-          <p className="font-mono text-2xl font-bold tracking-wider text-slate-900">{ticket.ticket_number}</p>
-          <p className="mt-0.5 text-xs text-slate-500">{formatDateTime(ticket.received_at)}</p>
+        <div className="p-5">
+          <div className="mb-4 rounded-lg border border-brand-100 bg-brand-50 py-3 text-center">
+            <p className="font-mono text-2xl font-bold tracking-wider text-brand-800">{ticket.ticket_number}</p>
+            <p className="mt-0.5 text-xs text-slate-500">{formatDateTime(ticket.received_at)}</p>
+          </div>
+
+          <dl className="space-y-1.5 text-sm">
+            <Row label="الزبون" value={ticket.customer?.full_name ?? "—"} />
+            <Row label="الهاتف" value={ticket.customer?.phone ?? "—"} ltr />
+            <Row label="القطعة" value={ticket.item_name} />
+            {ticket.karat && <Row label="العيار" value={ticket.karat} />}
+            {ticket.weight_in_grams !== null && <Row label="الوزن" value={formatWeight(ticket.weight_in_grams)} />}
+            <Row label="العطل" value={ticket.problem_description} />
+            {ticket.estimated_cost !== null && <Row label="التكلفة التقديرية" value={formatMoney(ticket.estimated_cost)} />}
+            {ticket.promised_at && <Row label="موعد التسليم" value={formatDateTime(ticket.promised_at)} />}
+            {ticket.branch?.name && <Row label="الفرع" value={ticket.branch.name} />}
+            {ticket.branch?.phone && <Row label="هاتف الفرع" value={ticket.branch.phone} ltr />}
+          </dl>
+
+          <div className="brand-hairline my-4" />
+          <p className="text-center text-xs text-slate-500">{settings.receipt_footer}</p>
         </div>
-
-        <dl className="space-y-1.5 text-sm">
-          <Row label="الزبون" value={ticket.customer?.full_name ?? "—"} />
-          <Row label="الهاتف" value={ticket.customer?.phone ?? "—"} ltr />
-          <Row label="القطعة" value={ticket.item_name} />
-          {ticket.karat && <Row label="العيار" value={ticket.karat} />}
-          {ticket.weight_in_grams !== null && <Row label="الوزن" value={formatWeight(ticket.weight_in_grams)} />}
-          <Row label="العطل" value={ticket.problem_description} />
-          {ticket.estimated_cost !== null && <Row label="التكلفة التقديرية" value={formatMoney(ticket.estimated_cost)} />}
-          {ticket.promised_at && <Row label="موعد التسليم" value={formatDateTime(ticket.promised_at)} />}
-          {ticket.branch?.name && <Row label="الفرع" value={ticket.branch.name} />}
-        </dl>
-
-        <div className="mt-5 flex flex-col items-center border-t border-dashed border-slate-300 pt-4">
-          {/* الزبون يتابع حالة قطعته بمسح الرمز — بلا تطبيق ولا تسجيل دخول. */}
-          <div dangerouslySetInnerHTML={{ __html: qr }} />
-          <p className="mt-2 text-center text-xs text-slate-500">امسح الرمز لمتابعة حالة قطعتك</p>
-          <p className="mt-1 break-all text-center text-[10px] text-slate-400" dir="ltr">{url}</p>
-        </div>
-
-        <p className="mt-4 text-center text-xs text-slate-500">{settings.receipt_footer}</p>
       </div>
     </div>
   );

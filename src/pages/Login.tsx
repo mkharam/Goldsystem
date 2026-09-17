@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { supabase, FUNCTIONS_URL } from "@/lib/supabase";
+import { Logo } from "@/components/Logo";
 
 export default function Login() {
   const { staff, loading, signIn } = useAuth();
@@ -57,14 +58,13 @@ export default function Login() {
   }
 
   return (
-    <div className="flex min-h-dvh items-center justify-center bg-gradient-to-b from-gold-50 via-white to-slate-100 px-4 py-8">
-      <div className="card w-full max-w-sm p-6">
+    <div className="brand-surface flex min-h-dvh items-center justify-center px-4 py-8">
+      <div className="w-full max-w-sm rounded-2xl border border-gold-600/25 bg-white p-6 shadow-2xl">
         <div className="mb-6 text-center">
-          <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-gold-400 to-gold-600 text-2xl">
-            💍
-          </div>
-          <h1 className="text-xl font-bold text-slate-900">متابعة الصيانة</h1>
-          <p className="mt-1 text-sm text-slate-500">ادخل بحسابك في نظام المخزون</p>
+          <Logo size={88} className="mx-auto mb-4 shadow-lg" />
+          <h1 className="text-xl font-bold text-brand-800">متابعة الصيانة</h1>
+          <div className="brand-hairline my-3" />
+          <p className="text-sm text-slate-500">ادخل بحسابك في نظام المخزون</p>
         </div>
 
         <form onSubmit={onSubmit} className="space-y-4">
@@ -100,14 +100,15 @@ export default function Login() {
                 autoCorrect="off"
                 spellCheck={false}
                 dir="ltr"
-                className="field text-left pl-16"
+                className="field text-left pl-20"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
               />
               <button
                 type="button"
                 onClick={() => setShowPassword((v) => !v)}
-                className="absolute inset-y-0 left-0 px-3 text-xs font-medium text-gold-700"
+                className="absolute left-2 top-1/2 -translate-y-1/2 rounded-md border border-slate-200
+                           bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-200"
               >
                 {showPassword ? "إخفاء" : "إظهار"}
               </button>

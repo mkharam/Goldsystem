@@ -3,6 +3,7 @@ import { useParams } from "react-router-dom";
 import { FUNCTIONS_URL } from "@/lib/supabase";
 import { REPAIR_STATUS, OPEN_STATUSES } from "@/lib/constants";
 import { formatDate, formatDateTime } from "@/lib/format";
+import { Logo } from "@/components/Logo";
 import type { RepairStatus } from "@/lib/types";
 
 const STEPS: RepairStatus[] = ["received", "in_progress", "ready", "delivered"];
@@ -43,14 +44,14 @@ export default function Track() {
 
   if (error) {
     return (
-      <div className="flex min-h-dvh items-center justify-center bg-slate-100 px-4">
+      <div className="brand-surface flex min-h-dvh items-center justify-center px-4">
         <p className="card p-6 text-center text-slate-600">{error}</p>
       </div>
     );
   }
 
   if (!data) {
-    return <div className="flex min-h-dvh items-center justify-center text-slate-400">جارٍ التحميل…</div>;
+    return <div className="brand-surface flex min-h-dvh items-center justify-center text-gold-300/70">جارٍ التحميل…</div>;
   }
 
   const { ticket } = data;
@@ -58,16 +59,17 @@ export default function Track() {
   const isCancelled = ticket.status === "cancelled";
 
   return (
-    <div className="min-h-dvh bg-gradient-to-b from-gold-50 via-white to-slate-100 px-4 py-8">
+    <div className="brand-surface min-h-dvh px-4 py-8">
       <div className="mx-auto max-w-md">
         <div className="mb-5 text-center">
-          <h1 className="text-xl font-bold text-slate-900">{data.shop_name}</h1>
-          <p className="text-sm text-slate-500">متابعة حالة الصيانة</p>
+          <Logo size={76} className="mx-auto mb-3 shadow-lg" />
+          <h1 className="text-xl font-bold text-gold-200">{data.shop_name}</h1>
+          <p className="text-sm text-gold-300/70">متابعة حالة الصيانة</p>
         </div>
 
         <div className="card p-5">
           <div className="border-b border-dashed border-slate-200 pb-4 text-center">
-            <p className="font-mono text-xl font-bold text-slate-900">{ticket.ticket_number}</p>
+            <p className="font-mono text-xl font-bold text-brand-800">{ticket.ticket_number}</p>
             <p className="mt-1 text-slate-700">{ticket.item_name}</p>
           </div>
 
@@ -133,7 +135,7 @@ export default function Track() {
           )}
         </div>
 
-        <p className="mt-4 text-center text-xs text-slate-400">{data.receipt_footer}</p>
+        <p className="mt-4 text-center text-xs text-gold-300/60">{data.receipt_footer}</p>
       </div>
     </div>
   );

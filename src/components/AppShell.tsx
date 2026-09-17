@@ -1,5 +1,6 @@
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
+import { Logo } from "./Logo";
 
 const NAV = [
   { to: "/", label: "الرئيسية" },
@@ -19,20 +20,28 @@ export function AppShell({
 
   return (
     <div className="min-h-dvh pb-20">
-      <header className="sticky top-0 z-20 border-b border-gold-200 bg-gradient-to-l from-gold-600 to-gold-500 text-white shadow-sm">
-        <div className="mx-auto flex max-w-3xl items-center justify-between gap-3 px-4 py-3">
-          <div className="min-w-0">
-            <p className="truncate text-sm font-semibold">{staff?.full_name}</p>
-            {inventoryDown && (
-              // الموظف يجب أن يعرف أن التعبئة التلقائية معطّلة قبل أن يبحث بالكود
-              // ويظن أن القطعة غير موجودة.
-              <p className="text-xs text-gold-100">المخزون غير متصل — الإدخال يدوي</p>
-            )}
+      <header className="brand-surface sticky top-0 z-20 text-white shadow-md">
+        <div className="mx-auto flex max-w-3xl items-center justify-between gap-3 px-4 py-2.5">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <Logo size={34} />
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold text-gold-100">{staff?.full_name}</p>
+              {inventoryDown && (
+                // الموظف يجب أن يعرف أن التعبئة التلقائية معطّلة قبل أن يبحث بالكود
+                // ويظن أن القطعة غير موجودة.
+                <p className="truncate text-xs text-gold-300/80">المخزون غير متصل — الإدخال يدوي</p>
+              )}
+            </div>
           </div>
-          <button type="button" onClick={signOut} className="rounded-lg px-3 py-1.5 text-sm hover:bg-white/15">
+          <button
+            type="button"
+            onClick={signOut}
+            className="shrink-0 rounded-lg border border-gold-500/30 px-3 py-1.5 text-sm text-gold-200 hover:bg-white/10"
+          >
             خروج
           </button>
         </div>
+        <div className="brand-hairline" />
       </header>
 
       <main className="mx-auto max-w-3xl px-4 py-5">{children}</main>
@@ -44,7 +53,7 @@ export function AppShell({
               key={item.to}
               to={item.to}
               className={`px-2 py-3 text-center text-sm font-medium transition ${
-                pathname === item.to ? "text-gold-700" : "text-slate-600 hover:text-gold-700"
+                pathname === item.to ? "text-brand-700" : "text-slate-600 hover:text-brand-700"
               }`}
             >
               {item.label}
