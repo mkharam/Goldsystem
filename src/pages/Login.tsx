@@ -1,12 +1,15 @@
 import { useState, type FormEvent } from "react";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
+import { supabase, FUNCTIONS_URL } from "@/lib/supabase";
 
 export default function Login() {
   const { staff, loading, signIn } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [detail, setDetail] = useState<string[]>([]);
+  const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
 
   if (!loading && staff) return <Navigate to="/" replace />;
@@ -15,13 +18,46 @@ export default function Login() {
     event.preventDefault();
     setBusy(true);
     setError(null);
+    setDetail([]);
     const result = await signIn(email, password);
-    if (!result.ok) setError(result.error);
+    if (!result.ok) {
+      setError(result.error);
+      setDetail(result.detail);
+    }
+    setBusy(false);
+  }
+
+  /** فحص الاتصال — يفصل عطل الشبكة عن خطأ البيانات، وكلاهما يبدو متشابهاً للمستخدم. */
+  async function runDiagnostics() {
+    setBusy(true);
+    setError(null);
+    const lines: string[] = [];
+
+    lines.push(`العنوان: ${window.location.href}`);
+
+    try {
+      const started = Date.now();
+      const { error: pingError } = await supabase.from("settings").select("key").limit(1);
+      const ms = Date.now() - started;
+      // المتوقّع رفض الصلاحية لأننا غير مسجّلين: يعني أن الشبكة تصل وRLS تعمل.
+      lines.push(pingError ? `قاعدة البيانات: ردّت خلال ${ms}ms — ${pingError.code ?? ""} ${pingError.message}` : `قاعدة البيانات: وصلت خلال ${ms}ms`);
+    } catch (err) {
+      lines.push(`قاعدة البيانات: تعذّر الوصول — ${err instanceof Error ? err.message : String(err)}`);
+    }
+
+    try {
+      const res = await fetch(`${FUNCTIONS_URL}/track?token=00000000000000000000000000000000`);
+      lines.push(`دوال الحافة: ${res.status} (المتوقّع 404 = تعمل)`);
+    } catch (err) {
+      lines.push(`دوال الحافة: تعذّر الوصول — ${err instanceof Error ? err.message : String(err)}`);
+    }
+
+    setDetail(lines);
     setBusy(false);
   }
 
   return (
-    <div className="flex min-h-dvh items-center justify-center bg-gradient-to-b from-gold-50 via-white to-slate-100 px-4">
+    <div className="flex min-h-dvh items-center justify-center bg-gradient-to-b from-gold-50 via-white to-slate-100 px-4 py-8">
       <div className="card w-full max-w-sm p-6">
         <div className="mb-6 text-center">
           <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-gold-400 to-gold-600 text-2xl">
@@ -39,6 +75,9 @@ export default function Login() {
               type="email"
               required
               autoComplete="username"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
               dir="ltr"
               className="field text-left"
               placeholder="name@example.com"
@@ -49,16 +88,33 @@ export default function Login() {
 
           <div>
             <label className="label" htmlFor="password">كلمة المرور</label>
-            <input
-              id="password"
-              type="password"
-              required
-              autoComplete="current-password"
-              dir="ltr"
-              className="field text-left"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
+            <div className="relative">
+              <input
+                id="password"
+                // إظهار الحرف يمنع نصف مشاكل الدخول على الهاتف: التعبئة التلقائية
+                // تملأ كلمة قديمة، ولوحة المفاتيح تضيف حرفاً كبيراً، ولا شيء يكشف ذلك.
+                type={showPassword ? "text" : "password"}
+                required
+                autoComplete="current-password"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                dir="ltr"
+                className="field text-left pl-16"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                className="absolute inset-y-0 left-0 px-3 text-xs font-medium text-gold-700"
+              >
+                {showPassword ? "إخفاء" : "إظهار"}
+              </button>
+            </div>
+            <p className="mt-1 text-xs text-slate-400">
+              {password.length > 0 ? `عدد المحارف: ${password.length}` : " "}
+            </p>
           </div>
 
           {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
@@ -67,6 +123,28 @@ export default function Login() {
             {busy ? "جارٍ الدخول…" : "دخول"}
           </button>
         </form>
+
+        <button
+          type="button"
+          onClick={runDiagnostics}
+          disabled={busy}
+          className="mt-3 w-full text-center text-xs text-slate-400 hover:text-slate-600"
+        >
+          فحص الاتصال
+        </button>
+
+        {detail.length > 0 && (
+          <div className="mt-3 rounded-lg bg-slate-900 p-3">
+            <p className="mb-1 text-[10px] font-semibold text-slate-400">تفاصيل تقنية</p>
+            <ul className="space-y-1">
+              {detail.map((line, i) => (
+                <li key={i} className="break-all font-mono text-[10px] leading-relaxed text-lime-300" dir="ltr">
+                  {line}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
     </div>
   );

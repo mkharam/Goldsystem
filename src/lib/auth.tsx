@@ -2,10 +2,18 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from "
 import { supabase, FUNCTIONS_URL } from "./supabase";
 import type { SessionStaff } from "./types";
 
+/**
+ * `detail` سطور تشخيص خام تُعرض للمستخدم عند الفشل.
+ *
+ * الرسائل العربية المهذّبة تُخفي السبب الحقيقي، وتصحيح الأخطاء على هاتف لا
+ * يملك كونسول شبه مستحيل — فنُظهر ما ردّه الخادم فعلاً بدل تخمينه.
+ */
+export type SignInResult = { ok: true } | { ok: false; error: string; detail: string[] };
+
 type AuthState = {
   staff: SessionStaff | null;
   loading: boolean;
-  signIn: (email: string, password: string) => Promise<{ ok: true } | { ok: false; error: string }>;
+  signIn: (email: string, password: string) => Promise<SignInResult>;
   signOut: () => Promise<void>;
 };
 
@@ -61,12 +69,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    * كاملاً حتى لو كان المخزون منقطعاً. وإن فشل، نطلب من دالة staff-auth أن
    * تتحقق من المخزون وتُنشئ الحساب، ثم نعيد المحاولة.
    */
-  async function signIn(email: string, password: string) {
+  async function signIn(email: string, password: string): Promise<SignInResult> {
     const normalized = email.trim().toLowerCase();
-    if (!normalized || !password) return { ok: false as const, error: "أدخل البريد وكلمة المرور" };
+    const detail: string[] = [];
+    detail.push(`بريد: "${normalized}" (${normalized.length} حرفاً)`);
+    detail.push(`طول كلمة المرور: ${password.length}`);
+
+    if (!normalized || !password) {
+      return { ok: false, error: "أدخل البريد وكلمة المرور", detail };
+    }
 
     const first = await supabase.auth.signInWithPassword({ email: normalized, password });
-    if (!first.error) return { ok: true as const };
+    if (!first.error) {
+      // الدخول نجح، لكن بلا صف موظف فعّال تمنع RLS كل شيء — نقولها صراحةً بدل
+      // ترك المستخدم أمام واجهة فارغة.
+      const linked = await loadStaff(first.data.user.id);
+      if (!linked) {
+        await supabase.auth.signOut();
+        detail.push("دخول Auth نجح، لكن لا يوجد صف موظف فعّال مرتبط بالحساب");
+        return { ok: false, error: "الحساب موجود لكنه غير مرتبط بموظف فعّال", detail };
+      }
+      return { ok: true };
+    }
+
+    detail.push(`محاولة الدخول المحلي: ${first.error.status ?? "?"} ${first.error.message}`);
 
     let provisioned: Response;
     try {
@@ -75,27 +101,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: normalized, password }),
       });
-    } catch {
-      return { ok: false as const, error: "تعذّر الاتصال — تحقّق من الإنترنت" };
+    } catch (err) {
+      detail.push(`الاتصال بـ staff-auth فشل: ${err instanceof Error ? err.message : String(err)}`);
+      return { ok: false, error: "تعذّر الاتصال — تحقّق من الإنترنت", detail };
     }
 
     if (!provisioned.ok) {
       const body = await provisioned.json().catch(() => ({}));
+      detail.push(`staff-auth: ${provisioned.status} ${body.error ?? ""}`.trim());
+
       if (body.error === "invalid_credentials") {
-        return { ok: false as const, error: "البريد أو كلمة المرور غير صحيحة" };
+        return { ok: false, error: "البريد أو كلمة المرور غير صحيحة", detail };
       }
       if (body.error === "inventory_unavailable" || body.error === "inventory_not_configured") {
         return {
-          ok: false as const,
+          ok: false,
           error: "تعذّر الوصول لنظام المخزون، ولا يوجد حساب محفوظ لك هنا بعد",
+          detail,
         };
       }
-      return { ok: false as const, error: "تعذّر تسجيل الدخول" };
+      return { ok: false, error: "تعذّر تسجيل الدخول", detail };
     }
 
     const second = await supabase.auth.signInWithPassword({ email: normalized, password });
-    if (second.error) return { ok: false as const, error: "تعذّر تسجيل الدخول بعد تهيئة الحساب" };
-    return { ok: true as const };
+    if (second.error) {
+      detail.push(`الدخول بعد التهيئة: ${second.error.status ?? "?"} ${second.error.message}`);
+      return { ok: false, error: "تعذّر تسجيل الدخول بعد تهيئة الحساب", detail };
+    }
+    return { ok: true };
   }
 
   async function signOut() {
