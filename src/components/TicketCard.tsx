@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { Link } from "react-router-dom";
 import { StatusBadge } from "./StatusBadge";
 import { formatWeight, overdueLabel, daysFromNow } from "@/lib/format";
 import { OPEN_STATUSES } from "@/lib/constants";
@@ -12,7 +12,7 @@ export function TicketCard({ ticket }: { ticket: TicketWithRelations }) {
 
   return (
     <Link
-      href={`/tickets/${ticket.id}`}
+      to={`/tickets/${ticket.id}`}
       className={`card block p-3 transition hover:border-gold-300 hover:shadow ${
         isOverdue ? "border-red-200 bg-red-50/40" : ""
       }`}
@@ -22,9 +22,7 @@ export function TicketCard({ ticket }: { ticket: TicketWithRelations }) {
           <p className="font-bold text-slate-900">{ticket.item_name}</p>
           <p className="mt-0.5 text-sm text-slate-600">
             {ticket.customer?.full_name ?? "—"}
-            {ticket.customer?.phone && (
-              <span className="text-slate-400"> · {ticket.customer.phone}</span>
-            )}
+            {ticket.customer?.phone && <span className="text-slate-400"> · {ticket.customer.phone}</span>}
           </p>
         </div>
         <StatusBadge status={ticket.status} />
@@ -35,9 +33,7 @@ export function TicketCard({ ticket }: { ticket: TicketWithRelations }) {
         {ticket.karat && <span>{ticket.karat}</span>}
         {ticket.weight_in_grams !== null && <span>{formatWeight(ticket.weight_in_grams)}</span>}
         {ticket.branch?.name && <span>{ticket.branch.name}</span>}
-        {due && (
-          <span className={isOverdue ? "font-semibold text-red-600" : "text-slate-500"}>{due}</span>
-        )}
+        {due && <span className={isOverdue ? "font-semibold text-red-600" : "text-slate-500"}>{due}</span>}
       </div>
     </Link>
   );

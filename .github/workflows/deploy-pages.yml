@@ -1,0 +1,57 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main, claude/repair-tracking-app-ouzfmo]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # عنوان المشروع على Pages هو /Goldsystem/ لا الجذر، فتُبنى مسارات الأصول عليه.
+      # عنوان Supabase والمفتاح العلني يأتيان من .env في المستودع: كلاهما يظهر
+      # أصلاً في حزمة المتصفح، وحماية البيانات في سياسات RLS لا في إخفائهما.
+      - name: Build
+        env:
+          GH_PAGES_BASE: /Goldsystem/
+        run: npm run build
+
+      # حيلة SPA المعتادة على GitHub Pages: أي مسار غير موجود (مثل /track/abc)
+      # يصل لصفحة 404 الافتراضية — بنسخ index.html إليها يتولّى React Router
+      # التوجيه من جهة العميل بدل ظهور 404 حقيقية عند فتح رابط مباشر أو تحديث الصفحة.
+      # هذا يخصّ رابط التتبّع تحديداً: الزبون يفتحه مباشرة من رمز QR.
+      - name: SPA fallback (404 -> index.html)
+        run: cp dist/index.html dist/404.html
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

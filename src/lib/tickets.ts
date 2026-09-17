@@ -1,9 +1,8 @@
-import "server-only";
-import { db } from "./db";
+import { supabase } from "./supabase";
 import { OPEN_STATUSES, ALLOWED_TRANSITIONS } from "./constants";
-import { getWeightTolerance } from "./settings";
-import { setItemStatus } from "./inventory";
-import type { RepairStatus, TicketWithRelations, StatusHistoryEntry, RepairPhoto } from "./types";
+import { setItemStatus, lookupCustomers, createInventoryCustomer } from "./inventory";
+import { phoneDigits } from "./constants";
+import type { RepairStatus, TicketWithRelations, StatusHistoryEntry, RepairPhoto, Customer } from "./types";
 
 const TICKET_SELECT = `
   *,
@@ -21,25 +20,20 @@ export type TicketFilters = {
 };
 
 export async function listTickets(filters: TicketFilters = {}): Promise<TicketWithRelations[]> {
-  let query = db().from("repair_tickets").select(TICKET_SELECT);
+  let query = supabase.from("repair_tickets").select(TICKET_SELECT);
 
-  if (filters.status === "open") {
-    query = query.in("status", OPEN_STATUSES);
-  } else if (filters.status === "overdue") {
+  if (filters.status === "open") query = query.in("status", OPEN_STATUSES);
+  else if (filters.status === "overdue") {
     query = query.in("status", OPEN_STATUSES).lt("promised_at", new Date().toISOString());
-  } else if (filters.status) {
-    query = query.eq("status", filters.status);
-  }
+  } else if (filters.status) query = query.eq("status", filters.status);
 
   if (filters.branchId) query = query.eq("branch_id", filters.branchId);
 
   if (filters.search?.trim()) {
-    const term = filters.search.trim();
-    // البحث يغطّي رقم التذكرة وكود القطعة واسمها — ما يعرفه الموظف عادةً.
+    const term = filters.search.trim().replace(/[,()]/g, "");
     query = query.or(`ticket_number.ilike.%${term}%,item_code.ilike.%${term}%,item_name.ilike.%${term}%`);
   }
 
-  // المتأخّرة أولاً ضمن المفتوحة، ثم الأحدث.
   const { data, error } = await query
     .order("promised_at", { ascending: true, nullsFirst: false })
     .order("created_at", { ascending: false })
@@ -50,21 +44,12 @@ export async function listTickets(filters: TicketFilters = {}): Promise<TicketWi
 }
 
 export async function getTicket(id: string): Promise<TicketWithRelations | null> {
-  const { data } = await db().from("repair_tickets").select(TICKET_SELECT).eq("id", id).maybeSingle();
-  return (data as unknown as TicketWithRelations) ?? null;
-}
-
-export async function getTicketByToken(token: string): Promise<TicketWithRelations | null> {
-  const { data } = await db()
-    .from("repair_tickets")
-    .select(TICKET_SELECT)
-    .eq("tracking_token", token)
-    .maybeSingle();
+  const { data } = await supabase.from("repair_tickets").select(TICKET_SELECT).eq("id", id).maybeSingle();
   return (data as unknown as TicketWithRelations) ?? null;
 }
 
 export async function getStatusHistory(ticketId: string): Promise<StatusHistoryEntry[]> {
-  const { data } = await db()
+  const { data } = await supabase
     .from("repair_status_history")
     .select("*, staff:staff!repair_status_history_changed_by_fkey (full_name)")
     .eq("ticket_id", ticketId)
@@ -72,11 +57,95 @@ export async function getStatusHistory(ticketId: string): Promise<StatusHistoryE
   return (data ?? []) as unknown as StatusHistoryEntry[];
 }
 
-export async function getPhotos(ticketId: string, publicOnly = false): Promise<RepairPhoto[]> {
-  let query = db().from("repair_photos").select("*").eq("ticket_id", ticketId);
-  if (publicOnly) query = query.eq("is_public", true);
-  const { data } = await query.order("created_at", { ascending: true });
+export async function getPhotos(ticketId: string): Promise<RepairPhoto[]> {
+  const { data } = await supabase
+    .from("repair_photos")
+    .select("*")
+    .eq("ticket_id", ticketId)
+    .order("created_at", { ascending: true });
   return (data ?? []) as RepairPhoto[];
+}
+
+export type CustomerMatch = Customer & { origin: "local" | "inventory" };
+
+/** بحث الزبون: محلياً أولاً (يعمل دائماً)، ثم في المخزون إن كان متاحاً. */
+export async function searchCustomers(phone: string): Promise<CustomerMatch[]> {
+  const digits = phoneDigits(phone);
+  if (digits.length < 3) return [];
+  const tail = digits.slice(-6);
+
+  const { data: local } = await supabase
+    .from("customers")
+    .select("id, inventory_customer_id, full_name, phone, notes")
+    .ilike("phone", `%${tail}%`)
+    .limit(10);
+
+  const matches: CustomerMatch[] = (local ?? []).map((c) => ({ ...c, origin: "local" as const }));
+  const seenInventory = new Set(matches.map((m) => m.inventory_customer_id).filter(Boolean));
+  const seenPhones = new Set(matches.map((m) => phoneDigits(m.phone)));
+
+  const remote = await lookupCustomers(digits);
+  if (remote.ok) {
+    for (const c of remote.data.customers) {
+      if (seenInventory.has(c.id)) continue;
+      if (c.phone && seenPhones.has(phoneDigits(c.phone))) continue;
+      matches.push({
+        id: `inventory:${c.id}`,
+        inventory_customer_id: c.id,
+        full_name: c.full_name,
+        phone: c.phone ?? "",
+        notes: null,
+        origin: "inventory",
+      });
+    }
+  }
+
+  return matches;
+}
+
+/** يُرجع معرّف زبون محلي جاهز للربط، منشئاً إياه عند الحاجة. */
+export async function resolveCustomer(input: {
+  customerId?: string | null;
+  fullName: string;
+  phone: string;
+}): Promise<string> {
+  const { customerId, fullName, phone } = input;
+  if (customerId && !customerId.startsWith("inventory:")) return customerId;
+
+  const inventoryId = customerId?.startsWith("inventory:") ? customerId.slice("inventory:".length) : null;
+
+  if (inventoryId) {
+    const { data: existing } = await supabase
+      .from("customers")
+      .select("id")
+      .eq("inventory_customer_id", inventoryId)
+      .maybeSingle();
+    if (existing) return existing.id;
+
+    const { data: created, error } = await supabase
+      .from("customers")
+      .insert({ inventory_customer_id: inventoryId, full_name: fullName, phone })
+      .select("id")
+      .single();
+    if (error || !created) throw new Error("تعذّر حفظ بيانات الزبون");
+    return created.id;
+  }
+
+  // زبون جديد — نحاول تسجيله في المخزون أيضاً، وفشل ذلك لا يمنع فتح التذكرة.
+  const remote = await createInventoryCustomer({ full_name: fullName, phone });
+
+  const { data: created, error } = await supabase
+    .from("customers")
+    .insert({
+      full_name: fullName,
+      phone,
+      inventory_customer_id: remote.ok ? remote.data.customer.id : null,
+    })
+    .select("id")
+    .single();
+
+  if (error || !created) throw new Error("تعذّر حفظ بيانات الزبون");
+  return created.id;
 }
 
 export type CreateTicketInput = {
@@ -96,21 +165,21 @@ export type CreateTicketInput = {
 };
 
 export async function createTicket(input: CreateTicketInput): Promise<TicketWithRelations> {
-  const { data: numberData, error: numberError } = await db().rpc("next_ticket_number", {
+  const { data: ticketNumber, error: numberError } = await supabase.rpc("next_ticket_number", {
     p_branch_id: input.branch_id,
   });
   if (numberError) throw new Error(`تعذّر توليد رقم التذكرة: ${numberError.message}`);
 
-  const { data, error } = await db()
+  const { data, error } = await supabase
     .from("repair_tickets")
-    .insert({ ...input, ticket_number: numberData as string, status: "received" })
+    .insert({ ...input, ticket_number: ticketNumber as string, status: "received" })
     .select(TICKET_SELECT)
     .single();
-
   if (error) throw new Error(error.message);
+
   const ticket = data as unknown as TicketWithRelations;
 
-  await db().from("repair_status_history").insert({
+  await supabase.from("repair_status_history").insert({
     ticket_id: ticket.id,
     from_status: null,
     to_status: "received",
@@ -118,27 +187,14 @@ export async function createTicket(input: CreateTicketInput): Promise<TicketWith
     changed_by: input.received_by,
   });
 
-  // تعليم القطعة "في الصيانة" في المخزون — أثر جانبي مقبول فشله.
-  if (input.inventory_product_id) {
-    void setItemStatus(input.inventory_product_id, "in_repair");
-  }
+  if (input.inventory_product_id) void setItemStatus(input.inventory_product_id, "in_repair");
 
   return ticket;
 }
 
-export type WeightCheck = {
-  tolerance: number;
-  difference: number;
-  withinTolerance: boolean;
-};
+export type WeightCheck = { tolerance: number; difference: number; withinTolerance: boolean };
 
-/** فحص وزن التسليم مقابل وزن الاستلام — الضمانة الأساسية ضد خطأ أو تبديل. */
-export async function checkWeight(
-  weightIn: number | null,
-  weightOut: number | null,
-): Promise<WeightCheck | null> {
-  if (weightIn === null || weightOut === null) return null;
-  const tolerance = await getWeightTolerance();
+export function checkWeight(weightIn: number, weightOut: number, tolerance: number): WeightCheck {
   const difference = Number((weightOut - weightIn).toFixed(3));
   return { tolerance, difference, withinTolerance: Math.abs(difference) <= tolerance };
 }
@@ -147,6 +203,7 @@ export type TransitionInput = {
   ticketId: string;
   to: RepairStatus;
   staffId: string;
+  tolerance: number;
   note?: string | null;
   workDone?: string | null;
   finalCost?: number | null;
@@ -156,9 +213,7 @@ export type TransitionInput = {
   acceptVariance?: boolean;
 };
 
-export type TransitionResult =
-  | { ok: true }
-  | { ok: false; error: string; weightCheck?: WeightCheck };
+export type TransitionResult = { ok: true } | { ok: false; error: string; weightCheck?: WeightCheck };
 
 export async function transitionTicket(input: TransitionInput): Promise<TransitionResult> {
   const ticket = await getTicket(input.ticketId);
@@ -173,19 +228,18 @@ export async function transitionTicket(input: TransitionInput): Promise<Transiti
   if (input.finalCost !== undefined) update.final_cost = input.finalCost;
 
   if (input.to === "delivered") {
-    // التسليم هو اللحظة التي يجب أن يُوزن فيها الشغل. نطلب الوزن متى كان وزن
-    // الاستلام معروفاً، ولا نسمح بتجاوز الفرق إلا بقرار صريح من الموظف مع سبب.
+    // التسليم هو اللحظة التي يجب أن تُوزن فيها القطعة؛ لا تجاوز لفرق الوزن إلا
+    // بقرار صريح من الموظف مع سبب مكتوب.
     if (ticket.weight_in_grams !== null) {
       if (input.weightOut === null || input.weightOut === undefined) {
         return { ok: false, error: "أدخل وزن القطعة عند التسليم" };
       }
 
-      const check = await checkWeight(ticket.weight_in_grams, input.weightOut);
-      if (check && !check.withinTolerance && !input.acceptVariance) {
+      const check = checkWeight(ticket.weight_in_grams, input.weightOut, input.tolerance);
+      if (!check.withinTolerance && !input.acceptVariance) {
         return { ok: false, error: "فرق الوزن يتجاوز المسموح", weightCheck: check };
       }
-
-      if (check && !check.withinTolerance) {
+      if (!check.withinTolerance) {
         update.weight_variance_accepted_by = input.staffId;
         update.weight_variance_note = input.varianceNote ?? null;
       }
@@ -198,10 +252,10 @@ export async function transitionTicket(input: TransitionInput): Promise<Transiti
     update.delivered_to_name = input.deliveredToName ?? ticket.customer?.full_name ?? null;
   }
 
-  const { error } = await db().from("repair_tickets").update(update).eq("id", input.ticketId);
+  const { error } = await supabase.from("repair_tickets").update(update).eq("id", input.ticketId);
   if (error) return { ok: false, error: error.message };
 
-  await db().from("repair_status_history").insert({
+  await supabase.from("repair_status_history").insert({
     ticket_id: input.ticketId,
     from_status: ticket.status,
     to_status: input.to,
@@ -209,7 +263,6 @@ export async function transitionTicket(input: TransitionInput): Promise<Transiti
     changed_by: input.staffId,
   });
 
-  // القطعة تعود لحالتها الطبيعية في المخزون متى خرجت من الصيانة.
   if (ticket.inventory_product_id && (input.to === "delivered" || input.to === "cancelled")) {
     void setItemStatus(ticket.inventory_product_id, "sold");
   }
@@ -225,12 +278,8 @@ export type DashboardStats = {
   deliveredToday: number;
 };
 
-export async function getDashboardStats(branchId?: string): Promise<DashboardStats> {
-  const base = () => {
-    const q = db().from("repair_tickets").select("id", { count: "exact", head: true });
-    return branchId ? q.eq("branch_id", branchId) : q;
-  };
-
+export async function getDashboardStats(): Promise<DashboardStats> {
+  const base = () => supabase.from("repair_tickets").select("id", { count: "exact", head: true });
   const startOfToday = new Date();
   startOfToday.setHours(0, 0, 0, 0);
 
@@ -249,4 +298,27 @@ export async function getDashboardStats(branchId?: string): Promise<DashboardSta
     inProgress: inProgress.count ?? 0,
     deliveredToday: deliveredToday.count ?? 0,
   };
+}
+
+const DEFAULT_SETTINGS = {
+  weight_tolerance_grams: "0.05",
+  default_turnaround_days: "3",
+  shop_name: "مجوهرات",
+  receipt_footer: "يرجى الاحتفاظ بهذا الإيصال لاستلام القطعة",
+};
+
+export type Settings = typeof DEFAULT_SETTINGS;
+
+export async function getSettings(): Promise<Settings> {
+  const { data } = await supabase.from("settings").select("key, value");
+  const out = { ...DEFAULT_SETTINGS };
+  for (const row of data ?? []) {
+    if (row.key in out) out[row.key as keyof Settings] = row.value;
+  }
+  return out;
+}
+
+export function toleranceFrom(settings: Settings): number {
+  const parsed = Number(settings.weight_tolerance_grams);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0.05;
 }

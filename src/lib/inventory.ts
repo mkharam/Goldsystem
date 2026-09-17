@@ -1,80 +1,49 @@
-import "server-only";
-import type { InventoryItem, StaffRole } from "./types";
+import { supabase, FUNCTIONS_URL } from "./supabase";
+import type { InventoryItem } from "./types";
 
 /**
- * عميل واجهة نظام المخزون (`repair-api`). العقد موثّق في
- * jewel-sight-manager/docs/repair-api.md
+ * التكامل مع نظام المخزون عبر وسيط `inventory-proxy`.
  *
- * القاعدة الحاكمة هنا: **لا شيء في هذا الملف يُفشل عملية**. كل دالة تُرجع نتيجة
- * أو `null`/قائمة فارغة، ولا ترمي استثناءً أبداً. انقطاع المخزون يعني أن الموظف
- * يُدخل البيانات يدوياً — لا أن التطبيق يتوقف.
+ * المتصفح لا يحمل مفتاح المخزون — الوسيط يحمله ويتحقق أولاً أن المتصل موظف
+ * فعّال. القاعدة هنا كما كانت: **لا شيء في هذا الملف يُفشل عملية**. كل دالة
+ * تُرجع نتيجة أو فشلاً موصوفاً، ولا ترمي استثناءً؛ انقطاع المخزون يعني إدخالاً
+ * يدوياً لا تعطّل التطبيق.
  */
 
-const TIMEOUT_MS = 6000; // الموظف واقف أمام الزبون؛ انتظار أطول من هذا يعني "اكتبها يدوياً"
+const TIMEOUT_MS = 8000;
 
 export type InventoryResult<T> =
   | { ok: true; data: T }
-  | { ok: false; reason: "disabled" | "unreachable" | "not_found" | "unauthorized" | "error" };
+  | { ok: false; reason: "unavailable" | "not_found" | "unauthorized" };
 
-function config(): { url: string; key: string } | null {
-  const url = process.env.INVENTORY_API_URL;
-  const key = process.env.INVENTORY_API_KEY;
-  if (!url || !key) return null;
-  return { url: url.replace(/\/+$/, ""), key };
-}
-
-export function isInventoryConfigured(): boolean {
-  return config() !== null;
-}
-
-async function call<T>(
-  path: string,
-  init: RequestInit = {},
-): Promise<InventoryResult<T>> {
-  const cfg = config();
-  if (!cfg) return { ok: false, reason: "disabled" };
+async function call<T>(path: string, init: RequestInit = {}): Promise<InventoryResult<T>> {
+  const { data: sessionData } = await supabase.auth.getSession();
+  const token = sessionData.session?.access_token;
+  if (!token) return { ok: false, reason: "unauthorized" };
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
   try {
-    const res = await fetch(`${cfg.url}${path}`, {
+    const res = await fetch(`${FUNCTIONS_URL}/inventory-proxy/${path}`, {
       ...init,
       signal: controller.signal,
-      cache: "no-store",
       headers: {
         "Content-Type": "application/json",
-        "x-api-key": cfg.key,
+        Authorization: `Bearer ${token}`,
         ...(init.headers ?? {}),
       },
     });
 
     if (res.status === 401 || res.status === 403) return { ok: false, reason: "unauthorized" };
     if (res.status === 404) return { ok: false, reason: "not_found" };
-    if (!res.ok) return { ok: false, reason: "error" };
-
+    if (!res.ok) return { ok: false, reason: "unavailable" };
     return { ok: true, data: (await res.json()) as T };
   } catch {
-    // مهلة، DNS، انقطاع شبكة — كلها "غير متاح" من منظور الموظف.
-    return { ok: false, reason: "unreachable" };
+    return { ok: false, reason: "unavailable" };
   } finally {
     clearTimeout(timer);
   }
-}
-
-export type InventoryStaff = {
-  staff_id: string;
-  full_name: string;
-  role: StaffRole;
-  branch_id: string | null;
-  branch_name: string | null;
-};
-
-export function loginStaff(email: string, password: string) {
-  return call<{ staff: InventoryStaff }>("/auth/login", {
-    method: "POST",
-    body: JSON.stringify({ email, password }),
-  });
 }
 
 export type InventoryBranch = {
@@ -87,7 +56,7 @@ export type InventoryBranch = {
 };
 
 export function fetchBranches() {
-  return call<{ branches: InventoryBranch[] }>("/branches");
+  return call<{ branches: InventoryBranch[] }>("branches");
 }
 
 export type InventoryCustomer = {
@@ -98,38 +67,29 @@ export type InventoryCustomer = {
 };
 
 export function lookupCustomers(phone: string) {
-  return call<{ customers: InventoryCustomer[] }>(`/customers/lookup?phone=${encodeURIComponent(phone)}`);
+  return call<{ customers: InventoryCustomer[] }>(`customers/lookup?phone=${encodeURIComponent(phone)}`);
 }
 
-export function createInventoryCustomer(input: {
-  full_name: string;
-  phone: string;
-  branch_id?: string | null;
-}) {
-  return call<{ customer: InventoryCustomer }>("/customers", {
+export function createInventoryCustomer(input: { full_name: string; phone: string; branch_id?: string | null }) {
+  return call<{ customer: InventoryCustomer }>("customers", {
     method: "POST",
     body: JSON.stringify(input),
   });
 }
 
 export function lookupItem(code: string) {
-  return call<{ item: InventoryItem }>(`/items/lookup?code=${encodeURIComponent(code)}`);
+  return call<{ item: InventoryItem }>(`items/lookup?code=${encodeURIComponent(code)}`);
 }
 
-/**
- * تعليم القطعة "في الصيانة" أو إعادتها. اختياري تماماً: نتجاهل الفشل عمداً لأن
- * حالة القطعة في المخزون لا يجوز أن تمنع فتح تذكرة أو تسليمها للزبون.
- */
+/** اختياري تماماً: فشله لا يمنع فتح تذكرة أو تسليمها. */
 export async function setItemStatus(productId: string, status: "in_repair" | "available" | "sold"): Promise<void> {
-  await call("/items/status", {
+  await call("items/status", {
     method: "POST",
     body: JSON.stringify({ product_id: productId, status }),
   });
 }
 
-export async function inventoryHealth(): Promise<"ok" | "down" | "disabled"> {
-  const cfg = config();
-  if (!cfg) return "disabled";
-  const res = await call<{ ok: boolean }>("/health");
+export async function inventoryHealth(): Promise<"ok" | "down"> {
+  const res = await call<{ ok: boolean }>("health");
   return res.ok ? "ok" : "down";
 }
