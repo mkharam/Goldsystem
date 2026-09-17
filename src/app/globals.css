@@ -1,0 +1,79 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-slate-50 text-slate-900 antialiased;
+  }
+
+  /* حقول الإدخال على الهاتف: أقل من 16px يجعل iOS يقرّب الصفحة تلقائياً عند
+     التركيز، فتقفز الواجهة أمام الموظف. نثبّت الحد الأدنى هنا لكل الحقول. */
+  input,
+  select,
+  textarea {
+    font-size: max(16px, 1rem);
+  }
+}
+
+@layer components {
+  .card {
+    @apply rounded-xl border border-slate-200 bg-white shadow-sm;
+  }
+
+  .label {
+    @apply mb-1.5 block text-sm font-medium text-slate-700;
+  }
+
+  .field {
+    @apply w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900
+           outline-none transition placeholder:text-slate-400
+           focus:border-gold-400 focus:ring-2 focus:ring-gold-200
+           disabled:bg-slate-100 disabled:text-slate-500;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm
+           font-semibold transition active:scale-[0.98] disabled:pointer-events-none
+           disabled:opacity-50;
+  }
+
+  .btn-primary {
+    @apply btn bg-gold-500 text-white hover:bg-gold-600;
+  }
+
+  .btn-success {
+    @apply btn bg-brand-600 text-white hover:bg-brand-700;
+  }
+
+  .btn-ghost {
+    @apply btn border border-slate-300 bg-white text-slate-700 hover:bg-slate-50;
+  }
+
+  .btn-danger {
+    @apply btn border border-red-200 bg-white text-red-700 hover:bg-red-50;
+  }
+
+  .badge {
+    @apply inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium;
+  }
+}
+
+@media print {
+  /* الإيصال يُطبع من المتصفح مباشرة على طابعة حرارية أو A4 — نخفي كل ما عداه. */
+  .no-print {
+    display: none !important;
+  }
+
+  body {
+    @apply bg-white;
+  }
+
+  @page {
+    margin: 8mm;
+  }
+}
