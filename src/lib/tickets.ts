@@ -31,7 +31,7 @@ export async function listTickets(filters: TicketFilters = {}): Promise<TicketWi
 
   if (filters.search?.trim()) {
     const term = filters.search.trim().replace(/[,()]/g, "");
-    query = query.or(`ticket_number.ilike.%${term}%,item_code.ilike.%${term}%,item_name.ilike.%${term}%`);
+    query = query.or(`ticket_number.ilike.%${term}%,item_name.ilike.%${term}%`);
   }
 
   const { data, error } = await query
@@ -280,8 +280,11 @@ export type DashboardStats = {
   deliveredToday: number;
 };
 
-export async function getDashboardStats(): Promise<DashboardStats> {
-  const base = () => supabase.from("repair_tickets").select("id", { count: "exact", head: true });
+export async function getDashboardStats(branchId?: string): Promise<DashboardStats> {
+  const base = () => {
+    const q = supabase.from("repair_tickets").select("id", { count: "exact", head: true });
+    return branchId ? q.eq("branch_id", branchId) : q;
+  };
   const startOfToday = new Date();
   startOfToday.setHours(0, 0, 0, 0);
 

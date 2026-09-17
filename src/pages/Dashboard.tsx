@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { AppShell } from "@/components/AppShell";
 import { TicketCard } from "@/components/TicketCard";
+import { BranchPicker, useBranches } from "@/components/BranchPicker";
+import { useAuth } from "@/lib/auth";
 import { getDashboardStats, listTickets, type DashboardStats } from "@/lib/tickets";
 import { inventoryHealth } from "@/lib/inventory";
 import type { TicketWithRelations } from "@/lib/types";
@@ -16,6 +18,10 @@ function StatCard({ label, value, tone }: { label: string; value: number; tone: 
 }
 
 export default function Dashboard() {
+  const { staff } = useAuth();
+  const branches = useBranches();
+  // نبدأ من فرع الموظف: ما يخصّه أولاً، وله أن يوسّع للكل.
+  const [branch, setBranch] = useState<string | "all">(staff?.branch_id ?? "all");
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [overdue, setOverdue] = useState<TicketWithRelations[]>([]);
   const [ready, setReady] = useState<TicketWithRelations[]>([]);
@@ -24,12 +30,13 @@ export default function Dashboard() {
 
   useEffect(() => {
     let active = true;
+    const branchId = branch === "all" ? undefined : branch;
     (async () => {
       try {
         const [s, o, r] = await Promise.all([
-          getDashboardStats(),
-          listTickets({ status: "overdue", limit: 10 }),
-          listTickets({ status: "ready", limit: 5 }),
+          getDashboardStats(branchId),
+          listTickets({ status: "overdue", limit: 10, branchId }),
+          listTickets({ status: "ready", limit: 5, branchId }),
         ]);
         if (!active) return;
         setStats(s);
@@ -44,11 +51,13 @@ export default function Dashboard() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [branch]);
 
   return (
     <AppShell inventoryDown={inventoryDown}>
       {error && <p className="mb-4 rounded-lg bg-red-50 px-3 py-2.5 text-sm text-red-700">{error}</p>}
+
+      <BranchPicker branches={branches} value={branch} onChange={setBranch} />
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatCard label="مفتوحة" value={stats?.open ?? 0} tone="text-slate-800" />

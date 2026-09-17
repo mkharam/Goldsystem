@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { AppShell } from "@/components/AppShell";
 import { TicketCard } from "@/components/TicketCard";
+import { BranchPicker, useBranches } from "@/components/BranchPicker";
+import { useAuth } from "@/lib/auth";
 import { listTickets } from "@/lib/tickets";
 import { REPAIR_STATUS } from "@/lib/constants";
 import type { RepairStatus, TicketWithRelations } from "@/lib/types";
@@ -13,6 +15,9 @@ const FILTERS: { key: string; label: string }[] = [
 ];
 
 export default function Tickets() {
+  const { staff } = useAuth();
+  const branches = useBranches();
+  const [branch, setBranch] = useState<string | "all">(staff?.branch_id ?? "all");
   const [params, setParams] = useSearchParams();
   const status = params.get("status") ?? "open";
   const [search, setSearch] = useState(params.get("q") ?? "");
@@ -22,13 +27,17 @@ export default function Tickets() {
   useEffect(() => {
     let active = true;
     setLoading(true);
-    listTickets({ status: status as RepairStatus | "open" | "overdue", search: params.get("q") ?? "" })
+    listTickets({
+      status: status as RepairStatus | "open" | "overdue",
+      search: params.get("q") ?? "",
+      branchId: branch === "all" ? undefined : branch,
+    })
       .then((rows) => active && setTickets(rows))
       .finally(() => active && setLoading(false));
     return () => {
       active = false;
     };
-  }, [status, params]);
+  }, [status, params, branch]);
 
   return (
     <AppShell>
@@ -44,11 +53,13 @@ export default function Tickets() {
       >
         <input
           className="field"
-          placeholder="ابحث برقم التذكرة أو كود القطعة أو اسمها"
+          placeholder="ابحث برقم التذكرة أو اسم القطعة"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
       </form>
+
+      <BranchPicker branches={branches} value={branch} onChange={setBranch} />
 
       <div className="-mx-4 mb-4 overflow-x-auto px-4">
         <div className="flex w-max gap-2">

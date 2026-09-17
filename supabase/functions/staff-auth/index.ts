@@ -102,17 +102,29 @@ Deno.serve(async (req) => {
       .eq("inventory_branch_id", branch.id)
       .maybeSingle();
 
+    // كود الفرع يدخل في رقم التذكرة الفريد، والمخزون يسمح بتكراره بين فروع
+    // (ثلاثة منها تحمل "BRA")، فنطلب كوداً فريداً بدل نسخ ما يأتي منه.
+    const { data: allocated } = await admin.rpc("allocate_branch_code", {
+      p_desired: branch.code,
+      p_branch_id: existing?.id ?? null,
+    });
+
     const payload = {
       inventory_branch_id: branch.id,
       name: branch.name,
-      code: branch.code,
+      code: (allocated as string | null) ?? branch.code,
       phone: branch.phone,
       is_active: branch.is_active,
       synced_at: new Date().toISOString(),
     };
     // لا نحذف فرعاً محلياً أبداً — التذاكر تشير إليه.
-    if (existing) await admin.from("branches").update(payload).eq("id", existing.id);
-    else await admin.from("branches").insert(payload);
+    // ولا نغيّر كود فرع قائم: رقم تذكرة مطبوع لا يمكن تصحيحه بعد خروجه.
+    if (existing) {
+      const { code: _ignored, ...rest } = payload;
+      await admin.from("branches").update(rest).eq("id", existing.id);
+    } else {
+      await admin.from("branches").insert(payload);
+    }
   }
 
   let localBranchId: string | null = null;
