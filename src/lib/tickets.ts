@@ -187,6 +187,8 @@ export async function createTicket(input: CreateTicketInput): Promise<TicketWith
     changed_by: input.received_by,
   });
 
+  // نموذج الاستلام لم يعد يربط بقطعة من المخزون (أُلغي حقل الباركود)، لكن
+  // الحقل باقٍ في المخطط فنحترمه إن وُجد في تذكرة قديمة أو ربط لاحق.
   if (input.inventory_product_id) void setItemStatus(input.inventory_product_id, "in_repair");
 
   return ticket;

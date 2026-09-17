@@ -1,5 +1,4 @@
 import { supabase, FUNCTIONS_URL } from "./supabase";
-import type { InventoryItem } from "./types";
 
 /**
  * التكامل مع نظام المخزون عبر وسيط `inventory-proxy`.
@@ -75,10 +74,6 @@ export function createInventoryCustomer(input: { full_name: string; phone: strin
     method: "POST",
     body: JSON.stringify(input),
   });
-}
-
-export function lookupItem(code: string) {
-  return call<{ item: InventoryItem }>(`items/lookup?code=${encodeURIComponent(code)}`);
 }
 
 /** اختياري تماماً: فشله لا يمنع فتح تذكرة أو تسليمها. */

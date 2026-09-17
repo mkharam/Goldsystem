@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { AppShell } from "@/components/AppShell";
 import { useAuth } from "@/lib/auth";
 import { supabase, PHOTO_BUCKET } from "@/lib/supabase";
-import { inventoryHealth, lookupItem } from "@/lib/inventory";
+import { inventoryHealth } from "@/lib/inventory";
 import {
   searchCustomers, resolveCustomer, createTicket, getSettings,
   type CustomerMatch,
@@ -34,9 +34,6 @@ export default function NewTicket() {
   const [customerId, setCustomerId] = useState("");
   const [matches, setMatches] = useState<CustomerMatch[]>([]);
 
-  const [code, setCode] = useState("");
-  const [lookupState, setLookupState] = useState<"idle" | "searching" | "found" | "not_found" | "unavailable">("idle");
-  const [productId, setProductId] = useState("");
   const [itemName, setItemName] = useState("");
   const [itemType, setItemType] = useState("");
   const [karat, setKarat] = useState("");
@@ -76,32 +73,6 @@ export default function NewTicket() {
     }, 350);
     return () => clearTimeout(timer);
   }, [phone, customerId]);
-
-  async function onLookupCode() {
-    const trimmed = code.trim();
-    if (!trimmed) return;
-    setLookupState("searching");
-
-    const res = await lookupItem(trimmed);
-    if (res.ok && res.data.item) {
-      const item = res.data.item;
-      setProductId(item.product_id ?? "");
-      setItemName(item.name ?? "");
-      setItemType(item.item_type ?? "");
-      setKarat(item.karat ?? "");
-      setWeight(item.weight_grams !== null ? String(item.weight_grams) : "");
-      // القطعة المباعة تحمل بيانات مشتريها — نعبّئ الزبون إن لم يُختر بعد.
-      if (item.sale?.customer_phone && !customerId && !phone) {
-        setPhone(item.sale.customer_phone);
-        setCustomerName(item.sale.customer_name ?? "");
-      }
-      setLookupState("found");
-    } else if (!res.ok && res.reason === "not_found") {
-      setLookupState("not_found");
-    } else {
-      setLookupState("unavailable");
-    }
-  }
 
   async function uploadPhotos(ticketId: string) {
     for (const file of files) {
@@ -144,9 +115,9 @@ export default function NewTicket() {
         customer_id: resolvedCustomerId,
         branch_id: branchId,
         received_by: staff!.staff_id,
-        item_source: productId ? "inventory" : "manual",
-        inventory_product_id: productId || null,
-        item_code: code.trim() || null,
+        item_source: "manual",
+        inventory_product_id: null,
+        item_code: null,
         item_name: itemName.trim(),
         item_type: itemType || null,
         karat: karat || null,
@@ -164,13 +135,6 @@ export default function NewTicket() {
       setBusy(false);
     }
   }
-
-  const lookupMessage: Record<string, { text: string; className: string }> = {
-    searching: { text: "جارٍ البحث…", className: "text-slate-500" },
-    found: { text: "تم العثور على القطعة وتعبئة بياناتها", className: "text-brand-700" },
-    not_found: { text: "لا توجد قطعة بهذا الكود — أكمل الإدخال يدوياً", className: "text-gold-700" },
-    unavailable: { text: "المخزون غير متاح — أكمل الإدخال يدوياً", className: "text-gold-700" },
-  };
 
   return (
     <AppShell inventoryDown={inventoryDown}>
@@ -251,37 +215,7 @@ export default function NewTicket() {
         <section className="card p-4">
           <h2 className="mb-3 font-bold text-slate-900">القطعة</h2>
 
-          <label className="label" htmlFor="code">كود القطعة</label>
-          <div className="flex gap-2">
-            <input
-              id="code"
-              className="field flex-1"
-              placeholder="امسح أو اكتب الكود"
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              onKeyDown={(e) => {
-                // الماسح الضوئي يُرسل Enter بعد الكود؛ نمنع إرسال النموذج كاملاً.
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  void onLookupCode();
-                }
-              }}
-            />
-            <button type="button" onClick={onLookupCode} className="btn-ghost shrink-0" disabled={!code.trim()}>
-              بحث
-            </button>
-          </div>
-
-          {lookupState !== "idle" && lookupMessage[lookupState] && (
-            <p className={`mt-1.5 text-sm ${lookupMessage[lookupState].className}`}>
-              {lookupMessage[lookupState].text}
-            </p>
-          )}
-          {inventoryDown && lookupState === "idle" && (
-            <p className="mt-1.5 text-sm text-gold-700">المخزون غير متاح — الإدخال يدوي</p>
-          )}
-
-          <div className="mt-3">
+          <div>
             <label className="label" htmlFor="item_name">اسم القطعة / وصفها</label>
             <input
               id="item_name"

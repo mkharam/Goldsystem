@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { getTicket, getSettings, type Settings } from "@/lib/tickets";
 import { formatDateTime, formatWeight, formatMoney } from "@/lib/format";
+import { qrSvg, trackingUrl } from "@/lib/qr";
 import { Logo } from "@/components/Logo";
 import type { TicketWithRelations } from "@/lib/types";
 
@@ -9,6 +10,8 @@ export default function Receipt() {
   const { id } = useParams<{ id: string }>();
   const [ticket, setTicket] = useState<TicketWithRelations | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
+  const [qr, setQr] = useState("");
+  const [url, setUrl] = useState("");
 
   useEffect(() => {
     if (!id) return;
@@ -16,6 +19,11 @@ export default function Receipt() {
       const [t, s] = await Promise.all([getTicket(id), getSettings()]);
       setTicket(t);
       setSettings(s);
+      if (t) {
+        const link = trackingUrl(t.tracking_token);
+        setUrl(link);
+        setQr(await qrSvg(link, 150));
+      }
     })();
   }, [id]);
 
@@ -56,6 +64,15 @@ export default function Receipt() {
             {ticket.branch?.name && <Row label="الفرع" value={ticket.branch.name} />}
             {ticket.branch?.phone && <Row label="هاتف الفرع" value={ticket.branch.phone} ltr />}
           </dl>
+
+          <div className="brand-hairline my-4" />
+
+          <div className="flex flex-col items-center">
+            {/* الزبون يتابع حالة قطعته بمسح الرمز — بلا تطبيق ولا تسجيل دخول. */}
+            <div dangerouslySetInnerHTML={{ __html: qr }} />
+            <p className="mt-2 text-center text-xs text-slate-500">امسح الرمز لمتابعة حالة قطعتك</p>
+            <p className="mt-1 break-all text-center text-[10px] text-slate-400" dir="ltr">{url}</p>
+          </div>
 
           <div className="brand-hairline my-4" />
           <p className="text-center text-xs text-slate-500">{settings.receipt_footer}</p>
