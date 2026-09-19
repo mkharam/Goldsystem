@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AppShell } from "@/components/AppShell";
+import { Steps } from "@/components/Steps";
 import { useAuth } from "@/lib/auth";
 import { supabase, PHOTO_BUCKET } from "@/lib/supabase";
 import { inventoryHealth } from "@/lib/inventory";
@@ -12,6 +13,8 @@ import { KARAT_OPTIONS, ITEM_TYPE_OPTIONS, normalizeDigits } from "@/lib/constan
 
 type Branch = { id: string; name: string; code: string | null };
 
+const STEP_LABELS = ["الزبون", "القطعة", "العطل"];
+
 function defaultPromisedAt(days: number): string {
   const date = new Date();
   date.setDate(date.getDate() + days);
@@ -20,10 +23,18 @@ function defaultPromisedAt(days: number): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T18:00`;
 }
 
+/**
+ * استلام قطعة، خطوة بخطوة.
+ *
+ * كانت استمارة واحدة طويلة، وهي تُربك من ليس تقنياً: لا يعرف أين يبدأ ولا متى
+ * انتهى. الآن ثلاث خطوات، في كل واحدة سؤال واحد واضح وزر واحد كبير، ولا ينتقل
+ * إلا بعد اكتمال ما تحتاجه — فالخطأ يظهر مكانه لا بعد الحفظ.
+ */
 export default function NewTicket() {
   const { staff } = useAuth();
   const navigate = useNavigate();
 
+  const [step, setStep] = useState(0);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [branchId, setBranchId] = useState("");
   const [inventoryDown, setInventoryDown] = useState(false);
@@ -46,8 +57,6 @@ export default function NewTicket() {
 
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  // الحقول التي لا تتغيّر عادةً تبدأ مطوية: الفرع افتراضي، والموعد محسوب،
-  // والنوع والتكلفة اختياريان. الموظف يملأ الأساسي ويضغط حفظ.
   const [showMore, setShowMore] = useState(false);
 
   useEffect(() => {
@@ -98,21 +107,34 @@ export default function NewTicket() {
     }
   }
 
-  async function onSubmit(event: FormEvent) {
-    event.preventDefault();
+  /** لا ينتقل لخطوة تالية قبل اكتمال الحالية — الخطأ يظهر مكانه لا بعد الحفظ. */
+  function goNext() {
     setError(null);
+    if (step === 0) {
+      if (!normalizeDigits(phone).trim()) return setError("اكتب رقم هاتف الزبون");
+      if (!customerName.trim()) return setError("اكتب اسم الزبون");
+    }
+    if (step === 1 && !itemName.trim()) return setError("اكتب اسم القطعة أو وصفها");
+    setStep((s) => s + 1);
+  }
 
-    const name = customerName.trim();
-    const digits = normalizeDigits(phone).trim();
-    if (!name) return setError("اسم الزبون مطلوب");
-    if (!digits) return setError("رقم هاتف الزبون مطلوب");
-    if (!itemName.trim()) return setError("اسم أو وصف القطعة مطلوب");
-    if (!problem.trim()) return setError("وصف العطل مطلوب");
+  function goBack() {
+    setError(null);
+    setStep((s) => Math.max(0, s - 1));
+  }
+
+  async function onSave() {
+    setError(null);
+    if (!problem.trim()) return setError("اكتب وصف العطل أو العمل المطلوب");
     if (!branchId) return setError("اختر الفرع");
 
     setBusy(true);
     try {
-      const resolvedCustomerId = await resolveCustomer({ customerId: customerId || null, fullName: name, phone: digits });
+      const resolvedCustomerId = await resolveCustomer({
+        customerId: customerId || null,
+        fullName: customerName.trim(),
+        phone: normalizeDigits(phone).trim(),
+      });
 
       const ticket = await createTicket({
         customer_id: resolvedCustomerId,
@@ -143,164 +165,200 @@ export default function NewTicket() {
   const promisedLabel = promisedAt
     ? new Intl.DateTimeFormat("ar", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })
         .format(new Date(promisedAt))
-    : "";
+    : "—";
 
   return (
     <AppShell inventoryDown={inventoryDown}>
-      <h1 className="mb-4 text-lg font-bold text-slate-900">استلام قطعة للصيانة</h1>
+      <h1 className="mb-4 text-center text-lg font-bold text-slate-900">استلام قطعة</h1>
 
-      <form onSubmit={onSubmit} className="space-y-5">
-        {/* ——— الزبون ——— */}
-        <section className="card p-4">
-          <h2 className="mb-3 font-bold text-slate-900">الزبون</h2>
+      <Steps labels={STEP_LABELS} current={step} />
 
-          <div className="relative">
-            <label className="label" htmlFor="phone">رقم الهاتف</label>
-            <input
-              id="phone"
-              type="text"
-              inputMode="tel"
-              dir="ltr"
-              className="field text-left"
-              placeholder="09xxxxxxxx"
-              value={phone}
-              onChange={(e) => {
-                setPhone(e.target.value);
-                if (customerId) setCustomerId("");
-              }}
-            />
+      <div className="card p-4">
+        {/* ——— ١ الزبون ——— */}
+        {step === 0 && (
+          <div className="space-y-4">
+            <div className="relative">
+              <label className="label text-base" htmlFor="phone">رقم هاتف الزبون</label>
+              <input
+                id="phone"
+                type="text"
+                inputMode="tel"
+                dir="ltr"
+                autoFocus
+                className="field py-3.5 text-left text-lg"
+                placeholder="09xxxxxxxx"
+                value={phone}
+                onChange={(e) => {
+                  setPhone(e.target.value);
+                  if (customerId) setCustomerId("");
+                }}
+              />
 
-            {matches.length > 0 && !customerId && (
-              <ul className="absolute z-10 mt-1 w-full overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
-                {matches.map((m) => (
-                  <li key={m.id}>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setCustomerId(m.id);
-                        setCustomerName(m.full_name);
-                        setPhone(m.phone);
-                        setMatches([]);
-                      }}
-                      className="flex w-full items-center justify-between px-3 py-2.5 text-right hover:bg-gold-50"
-                    >
-                      <span>
-                        <span className="block font-medium text-slate-900">{m.full_name}</span>
-                        <span className="block text-xs text-slate-500" dir="ltr">{m.phone}</span>
-                      </span>
-                      {m.origin === "inventory" && (
-                        <span className="badge border-slate-200 bg-slate-100 text-slate-600">من المخزون</span>
-                      )}
-                    </button>
-                  </li>
+              {matches.length > 0 && !customerId && (
+                <ul className="absolute z-10 mt-1 w-full overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
+                  {matches.map((m) => (
+                    <li key={m.id}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCustomerId(m.id);
+                          setCustomerName(m.full_name);
+                          setPhone(m.phone);
+                          setMatches([]);
+                        }}
+                        className="flex w-full items-center justify-between px-3 py-3 text-right hover:bg-brand-50"
+                      >
+                        <span>
+                          <span className="block font-medium text-slate-900">{m.full_name}</span>
+                          <span className="block text-xs text-slate-500" dir="ltr">{m.phone}</span>
+                        </span>
+                        <span className="badge border-brand-200 bg-brand-50 text-brand-700">زبون سابق</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <p className="mt-1.5 text-xs text-slate-500">لو الزبون سبق أن جاء، سيظهر اسمه — اضغط عليه.</p>
+            </div>
+
+            <div>
+              <label className="label text-base" htmlFor="customer_name">اسم الزبون</label>
+              <input
+                id="customer_name"
+                className="field py-3.5 text-lg"
+                placeholder="الاسم كما يُنطق"
+                value={customerName}
+                onChange={(e) => setCustomerName(e.target.value)}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* ——— ٢ القطعة ——— */}
+        {step === 1 && (
+          <div className="space-y-4">
+            <div>
+              <label className="label text-base" htmlFor="item_name">ما هي القطعة؟</label>
+              <input
+                id="item_name"
+                autoFocus
+                className="field py-3.5 text-lg"
+                placeholder="مثال: خاتم ذهب بفص"
+                value={itemName}
+                onChange={(e) => setItemName(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <label className="label text-base">العيار</label>
+              {/* أزرار بدل قائمة منسدلة: الخيارات قليلة واللمس أسرع من فتح قائمة. */}
+              <div className="grid grid-cols-4 gap-2">
+                {KARAT_OPTIONS.map((o) => (
+                  <button
+                    key={o}
+                    type="button"
+                    onClick={() => setKarat(karat === o ? "" : o)}
+                    className={`rounded-lg border py-3 text-sm font-semibold transition ${
+                      karat === o
+                        ? "border-brand-700 bg-brand-700 text-white"
+                        : "border-slate-300 bg-white text-slate-700"
+                    }`}
+                  >
+                    {o}
+                  </button>
                 ))}
-              </ul>
-            )}
-          </div>
+              </div>
+            </div>
 
-          <div className="mt-3">
-            <label className="label" htmlFor="customer_name">الاسم</label>
-            <input
-              id="customer_name"
-              className="field"
-              placeholder="اسم الزبون"
-              value={customerName}
-              onChange={(e) => setCustomerName(e.target.value)}
-            />
-          </div>
+            <div>
+              <label className="label text-base" htmlFor="weight">الوزن بالغرام</label>
+              <input
+                id="weight"
+                type="text"
+                inputMode="decimal"
+                dir="ltr"
+                className="field py-3.5 text-left text-lg"
+                placeholder="0.000"
+                value={weight}
+                onChange={(e) => setWeight(normalizeDigits(e.target.value))}
+              />
+              <p className="mt-1.5 text-xs text-slate-500">
+                مهم: يُقارَن بالوزن عند التسليم للتأكد أن الذهب لم ينقص.
+              </p>
+            </div>
 
-          {customerId && (
+            <div>
+              <label className="label text-base">صور القطعة</label>
+              <input
+                ref={fileInput}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                multiple
+                className="hidden"
+                onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
+              />
+              <button
+                type="button"
+                onClick={() => fileInput.current?.click()}
+                className={`w-full rounded-lg border-2 border-dashed py-5 text-sm font-medium transition ${
+                  files.length > 0
+                    ? "border-brand-400 bg-brand-50 text-brand-700"
+                    : "border-slate-300 text-slate-500"
+                }`}
+              >
+                {files.length > 0 ? `✓ ${files.length} صورة — اضغط للتغيير` : "📷 صوّر القطعة الآن"}
+              </button>
+              <p className="mt-1.5 text-xs text-slate-500">دليل حالتها قبل العمل عليها — يحميك من أي خلاف.</p>
+            </div>
+          </div>
+        )}
+
+        {/* ——— ٣ العطل ——— */}
+        {step === 2 && (
+          <div className="space-y-4">
+            <div>
+              <label className="label text-base" htmlFor="problem">ما المطلوب عملـه؟</label>
+              <textarea
+                id="problem"
+                rows={3}
+                autoFocus
+                className="field text-lg"
+                placeholder="مثال: كسر في المشبك، تلميع، تصغير مقاس"
+                value={problem}
+                onChange={(e) => setProblem(e.target.value)}
+              />
+            </div>
+
+            {/* مراجعة سريعة قبل الحفظ: يرى ما سيُطبع على الإيصال. */}
+            <div className="rounded-lg bg-slate-50 p-3 text-sm">
+              <p className="mb-2 font-semibold text-slate-700">مراجعة</p>
+              <dl className="space-y-1 text-slate-600">
+                <Line label="الزبون" value={`${customerName || "—"} · ${phone || "—"}`} />
+                <Line label="القطعة" value={[itemName || "—", karat, weight ? `${weight} غ` : ""].filter(Boolean).join(" · ")} />
+                <Line label="الفرع" value={branchName ?? "—"} />
+                <Line label="التسليم" value={promisedLabel} />
+                {estimatedCost && <Line label="التكلفة" value={estimatedCost} />}
+              </dl>
+            </div>
+
             <button
               type="button"
-              onClick={() => { setCustomerId(""); setCustomerName(""); setPhone(""); }}
-              className="mt-2 text-sm text-gold-700 hover:underline"
+              onClick={() => setShowMore((v) => !v)}
+              className="w-full rounded-lg border border-dashed border-slate-300 py-2.5 text-sm text-slate-500"
             >
-              زبون آخر
+              {showMore ? "إخفاء" : "تعديل الفرع أو الموعد أو التكلفة"}
             </button>
-          )}
-        </section>
 
-        {/* ——— القطعة ——— */}
-        <section className="card p-4">
-          <h2 className="mb-3 font-bold text-slate-900">القطعة</h2>
-
-          <div>
-            <label className="label" htmlFor="item_name">اسم القطعة / وصفها</label>
-            <input
-              id="item_name"
-              className="field"
-              placeholder="مثال: خاتم ذهب بفص"
-              value={itemName}
-              onChange={(e) => setItemName(e.target.value)}
-            />
-          </div>
-
-          <div className="mt-3">
-            <label className="label" htmlFor="karat">العيار</label>
-            <select id="karat" className="field" value={karat} onChange={(e) => setKarat(e.target.value)}>
-              <option value="">—</option>
-              {KARAT_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
-            </select>
-          </div>
-
-          <div className="mt-3">
-            <label className="label" htmlFor="weight">الوزن عند الاستلام (غرام)</label>
-            <input
-              id="weight"
-              type="text"
-              inputMode="decimal"
-              dir="ltr"
-              className="field text-left"
-              placeholder="0.000"
-              value={weight}
-              onChange={(e) => setWeight(normalizeDigits(e.target.value))}
-            />
-            <p className="mt-1 text-xs text-slate-500">يُقارَن بوزن التسليم للتأكد من عدم نقصان الذهب</p>
-          </div>
-        </section>
-
-        {/* ——— العمل ——— */}
-        <section className="card p-4">
-          <h2 className="mb-3 font-bold text-slate-900">العمل المطلوب</h2>
-
-          <label className="label" htmlFor="problem">وصف العطل</label>
-          <textarea
-            id="problem"
-            rows={3}
-            className="field"
-            placeholder="مثال: كسر في المشبك، تلميع، تصغير مقاس"
-            value={problem}
-            onChange={(e) => setProblem(e.target.value)}
-          />
-
-          {/* ملخّص لما هو مطويّ: الفرع والموعد يؤثّران على التذكرة فعلاً، فلا
-              يجوز أن يختفيا تماماً خلف زر. */}
-          <p className="mt-3 text-xs text-slate-500">
-            الفرع: <span className="font-medium text-slate-700">{branchName ?? "—"}</span>
-            {promisedAt && (
-              <> · التسليم: <span className="font-medium text-slate-700">{promisedLabel}</span></>
-            )}
-          </p>
-
-          <button
-            type="button"
-            onClick={() => setShowMore((v) => !v)}
-            className="mt-2 w-full rounded-lg border border-dashed border-slate-300 py-2 text-sm text-slate-500 hover:bg-slate-50"
-          >
-            {showMore ? "إخفاء التفاصيل الإضافية" : "تعديل التفاصيل (النوع، التكلفة، الموعد، الفرع)"}
-          </button>
-
-          {showMore && (
-            <div className="mt-3 space-y-3 border-t border-slate-100 pt-3">
-              <div>
-                <label className="label" htmlFor="item_type">نوع القطعة</label>
-                <select id="item_type" className="field" value={itemType} onChange={(e) => setItemType(e.target.value)}>
-                  <option value="">—</option>
-                  {ITEM_TYPE_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
-                </select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
+            {showMore && (
+              <div className="space-y-3 border-t border-slate-100 pt-3">
+                <div>
+                  <label className="label" htmlFor="item_type">نوع القطعة</label>
+                  <select id="item_type" className="field" value={itemType} onChange={(e) => setItemType(e.target.value)}>
+                    <option value="">—</option>
+                    {ITEM_TYPE_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
+                  </select>
+                </div>
                 <div>
                   <label className="label" htmlFor="cost">التكلفة التقديرية</label>
                   <input
@@ -324,45 +382,52 @@ export default function NewTicket() {
                     onChange={(e) => setPromisedAt(e.target.value)}
                   />
                 </div>
+                {branches.length > 1 && (
+                  <div>
+                    <label className="label" htmlFor="branch">الفرع</label>
+                    <select id="branch" className="field" value={branchId} onChange={(e) => setBranchId(e.target.value)}>
+                      {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                    </select>
+                  </div>
+                )}
               </div>
+            )}
+          </div>
+        )}
 
-              {branches.length > 1 && (
-                <div>
-                  <label className="label" htmlFor="branch">الفرع</label>
-                  <select id="branch" className="field" value={branchId} onChange={(e) => setBranchId(e.target.value)}>
-                    {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-                  </select>
-                </div>
-              )}
-            </div>
-          )}
-        </section>
+        {error && (
+          <p className="mt-4 rounded-lg bg-red-50 px-3 py-3 text-center text-sm font-medium text-red-700">
+            {error}
+          </p>
+        )}
+      </div>
 
-        {/* ——— الصور ——— */}
-        <section className="card p-4">
-          <h2 className="mb-1 font-bold text-slate-900">صور القطعة</h2>
-          <p className="mb-3 text-xs text-slate-500">صوّر القطعة عند الاستلام — دليل حالتها قبل العمل عليها</p>
-
-          <input
-            ref={fileInput}
-            type="file"
-            accept="image/*"
-            capture="environment"
-            multiple
-            className="hidden"
-            onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
-          />
-          <button type="button" onClick={() => fileInput.current?.click()} className="btn-ghost w-full py-3">
-            {files.length > 0 ? `${files.length} صورة محدّدة — تغيير` : "التقاط صور"}
+      {/* ——— التنقّل ——— */}
+      <div className="mt-4 flex gap-2">
+        {step > 0 && (
+          <button type="button" onClick={goBack} className="btn-ghost w-28 py-4" disabled={busy}>
+            رجوع
           </button>
-        </section>
-
-        {error && <p className="rounded-lg bg-red-50 px-3 py-2.5 text-sm text-red-700">{error}</p>}
-
-        <button type="submit" className="btn-primary w-full py-3 text-base" disabled={busy}>
-          {busy ? "جارٍ الحفظ…" : "حفظ وطباعة الإيصال"}
-        </button>
-      </form>
+        )}
+        {step < 2 ? (
+          <button type="button" onClick={goNext} className="btn-primary flex-1 py-4 text-base">
+            التالي
+          </button>
+        ) : (
+          <button type="button" onClick={onSave} className="btn-success flex-1 py-4 text-base" disabled={busy}>
+            {busy ? "جارٍ الحفظ…" : "حفظ وطباعة الإيصال"}
+          </button>
+        )}
+      </div>
     </AppShell>
+  );
+}
+
+function Line({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex justify-between gap-3">
+      <dt className="shrink-0 text-slate-400">{label}</dt>
+      <dd className="text-left font-medium text-slate-700">{value}</dd>
+    </div>
   );
 }
