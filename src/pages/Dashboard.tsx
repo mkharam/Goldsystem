@@ -57,18 +57,17 @@ export default function Dashboard() {
     <AppShell inventoryDown={inventoryDown}>
       {error && <p className="mb-4 rounded-lg bg-red-50 px-3 py-2.5 text-sm text-red-700">{error}</p>}
 
+      <Link to="/tickets/new" className="btn-primary mb-4 w-full py-4 text-base shadow-sm">
+        + استلام قطعة جديدة
+      </Link>
+
       <BranchPicker branches={branches} value={branch} onChange={setBranch} />
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatCard label="مفتوحة" value={stats?.open ?? 0} tone="text-slate-800" />
+      <div className="grid grid-cols-3 gap-2">
         <StatCard label="متأخّرة" value={stats?.overdue ?? 0} tone="text-red-700" />
-        <StatCard label="جاهزة للتسليم" value={stats?.ready ?? 0} tone="text-brand-700" />
-        <StatCard label="سُلّمت اليوم" value={stats?.deliveredToday ?? 0} tone="text-slate-800" />
+        <StatCard label="جاهزة" value={stats?.ready ?? 0} tone="text-brand-700" />
+        <StatCard label="قيد العمل" value={stats?.inProgress ?? 0} tone="text-slate-800" />
       </div>
-
-      <Link to="/tickets/new" className="btn-primary mt-4 w-full py-3 text-base">
-        استلام قطعة جديدة
-      </Link>
 
       <section className="mt-6">
         <div className="mb-2 flex items-center justify-between">

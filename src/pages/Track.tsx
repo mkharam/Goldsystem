@@ -67,17 +67,36 @@ export default function Track() {
           <p className="text-sm text-gold-300/70">متابعة حالة الصيانة</p>
         </div>
 
-        <div className="card p-5">
-          <div className="border-b border-dashed border-slate-200 pb-4 text-center">
-            <p className="font-mono text-xl font-bold text-brand-800">{ticket.ticket_number}</p>
-            <p className="mt-1 text-slate-700">{ticket.item_name}</p>
+        <div className="card overflow-hidden">
+          {/* الحالة أولاً وبأكبر خط: الزبون يفتح الصفحة ليعرفها، لا ليقرأ تفاصيل. */}
+          <div
+            className={`px-5 py-6 text-center ${
+              isCancelled
+                ? "bg-red-50"
+                : ticket.status === "ready"
+                  ? "bg-brand-600 text-white"
+                  : ticket.status === "delivered"
+                    ? "bg-slate-100"
+                    : "bg-gold-50"
+            }`}
+          >
+            <p className={`text-2xl font-bold ${ticket.status === "ready" ? "text-white" : "text-brand-800"}`}>
+              {isCancelled ? "أُلغيت" : REPAIR_STATUS[ticket.status].label}
+            </p>
+            {ticket.status === "ready" && (
+              <p className="mt-1 text-sm text-brand-50">تفضّل لاستلامها من المحل</p>
+            )}
+            {isCancelled && <p className="mt-1 text-sm text-red-700">يرجى مراجعة المحل</p>}
           </div>
 
-          {isCancelled ? (
-            <p className="mt-4 rounded-lg bg-red-50 px-3 py-3 text-center text-sm font-medium text-red-700">
-              أُلغيت هذه التذكرة — يرجى مراجعة المحل
-            </p>
-          ) : (
+          <div className="border-b border-dashed border-slate-200 px-5 pb-4 pt-4 text-center">
+            <p className="text-lg font-semibold text-slate-800">{ticket.item_name}</p>
+            <p className="mt-1 font-mono text-sm text-slate-500">{ticket.ticket_number}</p>
+          </div>
+
+          <div className="p-5 pt-0">
+
+          {isCancelled ? null : (
             <ol className="mt-5 space-y-4">
               {STEPS.map((step, index) => {
                 const done = index <= currentStep;
@@ -107,12 +126,6 @@ export default function Track() {
             </ol>
           )}
 
-          {ticket.status === "ready" && (
-            <p className="mt-5 rounded-lg bg-brand-50 px-3 py-3 text-center text-sm font-semibold text-brand-800">
-              قطعتك جاهزة للاستلام
-            </p>
-          )}
-
           {OPEN_STATUSES.includes(ticket.status) && ticket.promised_at && ticket.status !== "ready" && (
             <p className="mt-5 text-center text-sm text-slate-600">
               الموعد المتوقّع للتسليم: {formatDateTime(ticket.promised_at)}
@@ -130,9 +143,10 @@ export default function Track() {
             </div>
           )}
 
-          {ticket.branch_phone && (
-            <a href={`tel:${ticket.branch_phone}`} className="btn-ghost mt-5 w-full">اتصل بالفرع</a>
-          )}
+            {ticket.branch_phone && (
+              <a href={`tel:${ticket.branch_phone}`} className="btn-ghost mt-5 w-full">اتصل بالفرع</a>
+            )}
+          </div>
         </div>
 
         <p className="mt-4 text-center text-xs text-gold-300/60">{data.receipt_footer}</p>

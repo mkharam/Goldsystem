@@ -8,7 +8,7 @@ import {
   getTicket, getStatusHistory, getPhotos, transitionTicket, getSettings,
   toleranceFrom, checkWeight, type Settings,
 } from "@/lib/tickets";
-import { REPAIR_STATUS, PHOTO_STAGE, ALLOWED_TRANSITIONS, OPEN_STATUSES, normalizeDigits, phoneDigits } from "@/lib/constants";
+import { REPAIR_STATUS, PHOTO_STAGE, ALLOWED_TRANSITIONS, PRIMARY_NEXT, OPEN_STATUSES, normalizeDigits, phoneDigits } from "@/lib/constants";
 import { formatDateTime, formatWeight, formatMoney, overdueLabel, daysFromNow } from "@/lib/format";
 import { trackingUrl } from "@/lib/qr";
 import type { RepairStatus, TicketWithRelations, StatusHistoryEntry, RepairPhoto } from "@/lib/types";
@@ -33,6 +33,7 @@ export default function TicketDetail() {
   const [varianceNote, setVarianceNote] = useState("");
   const [acceptVariance, setAcceptVariance] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [showOther, setShowOther] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const reload = useCallback(async () => {
@@ -70,6 +71,9 @@ export default function TicketDetail() {
       : null;
 
   const track = trackingUrl(ticket.tracking_token);
+
+  const primaryNext = PRIMARY_NEXT[ticket.status];
+  const otherOptions = ALLOWED_TRANSITIONS[ticket.status].filter((o) => o !== primaryNext?.to);
 
   async function onTransition() {
     if (!target || !staff || !ticket) return;
@@ -167,72 +171,40 @@ export default function TicketDetail() {
         </p>
       )}
 
-      <section className="card mb-4 p-4">
-        <h2 className="mb-2 font-bold text-slate-900">الزبون</h2>
-        <p className="text-slate-900">{ticket.customer?.full_name ?? "—"}</p>
-        <p className="text-sm text-slate-500" dir="ltr">{ticket.customer?.phone ?? "—"}</p>
-        {ticket.customer?.phone && (
-          <button type="button" onClick={notifyWhatsApp} className="btn-success mt-3 w-full">
-            إبلاغ الزبون عبر واتساب
-          </button>
-        )}
-      </section>
-
-      <section className="card mb-4 p-4">
-        <h2 className="mb-2 font-bold text-slate-900">القطعة</h2>
-        <dl className="space-y-1.5 text-sm">
-          {ticket.item_code && <Row label="الكود" value={ticket.item_code} />}
-          {ticket.item_type && <Row label="النوع" value={ticket.item_type} />}
-          {ticket.karat && <Row label="العيار" value={ticket.karat} />}
-          <Row label="الوزن عند الاستلام" value={formatWeight(ticket.weight_in_grams)} />
-          {ticket.weight_out_grams !== null && <Row label="الوزن عند التسليم" value={formatWeight(ticket.weight_out_grams)} />}
-          <Row label="المصدر" value={ticket.item_source === "inventory" ? "من المخزون" : "إدخال يدوي"} />
-        </dl>
-
-        {variance !== null && (
-          <div className={`mt-3 rounded-lg px-3 py-2 text-sm ${
-            Math.abs(variance) <= tolerance ? "bg-brand-50 text-brand-800" : "bg-red-50 text-red-700"
-          }`}>
-            فرق الوزن: {variance > 0 ? "+" : ""}{variance.toFixed(3)} غ (المسموح ±{tolerance} غ)
-            {ticket.weight_variance_note && (
-              <span className="mt-1 block text-xs opacity-80">{ticket.weight_variance_note}</span>
-            )}
-          </div>
-        )}
-      </section>
-
-      <section className="card mb-4 p-4">
-        <h2 className="mb-2 font-bold text-slate-900">العمل المطلوب</h2>
-        <p className="whitespace-pre-wrap text-sm text-slate-700">{ticket.problem_description}</p>
-        {ticket.work_done && (
-          <>
-            <h3 className="mb-1 mt-3 text-sm font-semibold text-slate-900">ما تم تنفيذه</h3>
-            <p className="whitespace-pre-wrap text-sm text-slate-700">{ticket.work_done}</p>
-          </>
-        )}
-        <dl className="mt-3 space-y-1.5 border-t border-slate-100 pt-3 text-sm">
-          <Row label="التكلفة التقديرية" value={formatMoney(ticket.estimated_cost)} />
-          {ticket.final_cost !== null && <Row label="التكلفة النهائية" value={formatMoney(ticket.final_cost)} />}
-          <Row label="الاستلام" value={formatDateTime(ticket.received_at)} />
-          <Row label="موعد التسليم" value={formatDateTime(ticket.promised_at)} />
-          {ticket.delivered_at && <Row label="سُلّمت" value={formatDateTime(ticket.delivered_at)} />}
-          {ticket.received_by_staff && <Row label="استلمها" value={ticket.received_by_staff.full_name} />}
-        </dl>
-      </section>
-
       {/* ——— الإجراءات ——— */}
       {ALLOWED_TRANSITIONS[ticket.status].length > 0 && (
         <section className="card mb-4 p-4">
           {!target ? (
             <>
-              <h2 className="mb-3 font-bold text-slate-900">تغيير الحالة</h2>
-              <div className="grid gap-2">
-                {ALLOWED_TRANSITIONS[ticket.status].map((option) => (
+              {/* الخطوة الطبيعية كزر واحد كبير؛ الباقي مطوي حتى لا يختار
+                  الموظف من قائمة في كل مرة وهو أمام الزبون. */}
+              {primaryNext && (
+                <button
+                  type="button"
+                  onClick={() => { setTarget(primaryNext.to); setActionError(null); }}
+                  className="btn-success w-full py-4 text-base"
+                >
+                  {primaryNext.label}
+                </button>
+              )}
+
+              {otherOptions.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setShowOther((v) => !v)}
+                  className="mt-2 w-full text-center text-sm text-slate-500 hover:text-slate-700"
+                >
+                  {showOther ? "إخفاء الخيارات" : "خيارات أخرى"}
+                </button>
+              )}
+
+              <div className={`grid gap-2 ${showOther ? "mt-2" : "hidden"}`}>
+                {otherOptions.map((option) => (
                   <button
                     key={option}
                     type="button"
                     onClick={() => { setTarget(option); setActionError(null); }}
-                    className={option === "delivered" ? "btn-success py-3" : "btn-ghost py-3"}
+                    className={option === "cancelled" ? "btn-ghost py-3 text-red-700" : "btn-ghost py-3"}
                   >
                     {option === "cancelled" ? "إلغاء التذكرة" : REPAIR_STATUS[option].label}
                   </button>
@@ -321,6 +293,60 @@ export default function TicketDetail() {
           )}
         </section>
       )}
+
+      <section className="card mb-4 p-4">
+        <h2 className="mb-2 font-bold text-slate-900">الزبون</h2>
+        <p className="text-slate-900">{ticket.customer?.full_name ?? "—"}</p>
+        <p className="text-sm text-slate-500" dir="ltr">{ticket.customer?.phone ?? "—"}</p>
+        {ticket.customer?.phone && (
+          <button type="button" onClick={notifyWhatsApp} className="btn-success mt-3 w-full">
+            إبلاغ الزبون عبر واتساب
+          </button>
+        )}
+      </section>
+
+      <section className="card mb-4 p-4">
+        <h2 className="mb-2 font-bold text-slate-900">القطعة</h2>
+        <dl className="space-y-1.5 text-sm">
+          {ticket.item_code && <Row label="الكود" value={ticket.item_code} />}
+          {ticket.item_type && <Row label="النوع" value={ticket.item_type} />}
+          {ticket.karat && <Row label="العيار" value={ticket.karat} />}
+          <Row label="الوزن عند الاستلام" value={formatWeight(ticket.weight_in_grams)} />
+          {ticket.weight_out_grams !== null && <Row label="الوزن عند التسليم" value={formatWeight(ticket.weight_out_grams)} />}
+          <Row label="المصدر" value={ticket.item_source === "inventory" ? "من المخزون" : "إدخال يدوي"} />
+        </dl>
+
+        {variance !== null && (
+          <div className={`mt-3 rounded-lg px-3 py-2 text-sm ${
+            Math.abs(variance) <= tolerance ? "bg-brand-50 text-brand-800" : "bg-red-50 text-red-700"
+          }`}>
+            فرق الوزن: {variance > 0 ? "+" : ""}{variance.toFixed(3)} غ (المسموح ±{tolerance} غ)
+            {ticket.weight_variance_note && (
+              <span className="mt-1 block text-xs opacity-80">{ticket.weight_variance_note}</span>
+            )}
+          </div>
+        )}
+      </section>
+
+      <section className="card mb-4 p-4">
+        <h2 className="mb-2 font-bold text-slate-900">العمل المطلوب</h2>
+        <p className="whitespace-pre-wrap text-sm text-slate-700">{ticket.problem_description}</p>
+        {ticket.work_done && (
+          <>
+            <h3 className="mb-1 mt-3 text-sm font-semibold text-slate-900">ما تم تنفيذه</h3>
+            <p className="whitespace-pre-wrap text-sm text-slate-700">{ticket.work_done}</p>
+          </>
+        )}
+        <dl className="mt-3 space-y-1.5 border-t border-slate-100 pt-3 text-sm">
+          <Row label="التكلفة التقديرية" value={formatMoney(ticket.estimated_cost)} />
+          {ticket.final_cost !== null && <Row label="التكلفة النهائية" value={formatMoney(ticket.final_cost)} />}
+          <Row label="الاستلام" value={formatDateTime(ticket.received_at)} />
+          <Row label="موعد التسليم" value={formatDateTime(ticket.promised_at)} />
+          {ticket.delivered_at && <Row label="سُلّمت" value={formatDateTime(ticket.delivered_at)} />}
+          {ticket.received_by_staff && <Row label="استلمها" value={ticket.received_by_staff.full_name} />}
+        </dl>
+      </section>
+
 
       {/* ——— الصور ——— */}
       <section className="card mb-4 p-4">

@@ -46,6 +46,9 @@ export default function NewTicket() {
 
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // الحقول التي لا تتغيّر عادةً تبدأ مطوية: الفرع افتراضي، والموعد محسوب،
+  // والنوع والتكلفة اختياريان. الموظف يملأ الأساسي ويضغط حفظ.
+  const [showMore, setShowMore] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -135,6 +138,12 @@ export default function NewTicket() {
       setBusy(false);
     }
   }
+
+  const branchName = branches.find((b) => b.id === branchId)?.name;
+  const promisedLabel = promisedAt
+    ? new Intl.DateTimeFormat("ar", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })
+        .format(new Date(promisedAt))
+    : "";
 
   return (
     <AppShell inventoryDown={inventoryDown}>
@@ -226,21 +235,12 @@ export default function NewTicket() {
             />
           </div>
 
-          <div className="mt-3 grid grid-cols-2 gap-3">
-            <div>
-              <label className="label" htmlFor="item_type">النوع</label>
-              <select id="item_type" className="field" value={itemType} onChange={(e) => setItemType(e.target.value)}>
-                <option value="">—</option>
-                {ITEM_TYPE_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="label" htmlFor="karat">العيار</label>
-              <select id="karat" className="field" value={karat} onChange={(e) => setKarat(e.target.value)}>
-                <option value="">—</option>
-                {KARAT_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
-              </select>
-            </div>
+          <div className="mt-3">
+            <label className="label" htmlFor="karat">العيار</label>
+            <select id="karat" className="field" value={karat} onChange={(e) => setKarat(e.target.value)}>
+              <option value="">—</option>
+              {KARAT_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
+            </select>
           </div>
 
           <div className="mt-3">
@@ -273,38 +273,67 @@ export default function NewTicket() {
             onChange={(e) => setProblem(e.target.value)}
           />
 
-          <div className="mt-3 grid grid-cols-2 gap-3">
-            <div>
-              <label className="label" htmlFor="cost">التكلفة التقديرية</label>
-              <input
-                id="cost"
-                type="text"
-                inputMode="decimal"
-                dir="ltr"
-                className="field text-left"
-                placeholder="0"
-                value={estimatedCost}
-                onChange={(e) => setEstimatedCost(normalizeDigits(e.target.value))}
-              />
-            </div>
-            <div>
-              <label className="label" htmlFor="promised">موعد التسليم</label>
-              <input
-                id="promised"
-                type="datetime-local"
-                className="field"
-                value={promisedAt}
-                onChange={(e) => setPromisedAt(e.target.value)}
-              />
-            </div>
-          </div>
+          {/* ملخّص لما هو مطويّ: الفرع والموعد يؤثّران على التذكرة فعلاً، فلا
+              يجوز أن يختفيا تماماً خلف زر. */}
+          <p className="mt-3 text-xs text-slate-500">
+            الفرع: <span className="font-medium text-slate-700">{branchName ?? "—"}</span>
+            {promisedAt && (
+              <> · التسليم: <span className="font-medium text-slate-700">{promisedLabel}</span></>
+            )}
+          </p>
 
-          {branches.length > 1 && (
-            <div className="mt-3">
-              <label className="label" htmlFor="branch">الفرع</label>
-              <select id="branch" className="field" value={branchId} onChange={(e) => setBranchId(e.target.value)}>
-                {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-              </select>
+          <button
+            type="button"
+            onClick={() => setShowMore((v) => !v)}
+            className="mt-2 w-full rounded-lg border border-dashed border-slate-300 py-2 text-sm text-slate-500 hover:bg-slate-50"
+          >
+            {showMore ? "إخفاء التفاصيل الإضافية" : "تعديل التفاصيل (النوع، التكلفة، الموعد، الفرع)"}
+          </button>
+
+          {showMore && (
+            <div className="mt-3 space-y-3 border-t border-slate-100 pt-3">
+              <div>
+                <label className="label" htmlFor="item_type">نوع القطعة</label>
+                <select id="item_type" className="field" value={itemType} onChange={(e) => setItemType(e.target.value)}>
+                  <option value="">—</option>
+                  {ITEM_TYPE_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="label" htmlFor="cost">التكلفة التقديرية</label>
+                  <input
+                    id="cost"
+                    type="text"
+                    inputMode="decimal"
+                    dir="ltr"
+                    className="field text-left"
+                    placeholder="0"
+                    value={estimatedCost}
+                    onChange={(e) => setEstimatedCost(normalizeDigits(e.target.value))}
+                  />
+                </div>
+                <div>
+                  <label className="label" htmlFor="promised">موعد التسليم</label>
+                  <input
+                    id="promised"
+                    type="datetime-local"
+                    className="field"
+                    value={promisedAt}
+                    onChange={(e) => setPromisedAt(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              {branches.length > 1 && (
+                <div>
+                  <label className="label" htmlFor="branch">الفرع</label>
+                  <select id="branch" className="field" value={branchId} onChange={(e) => setBranchId(e.target.value)}>
+                    {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                  </select>
+                </div>
+              )}
             </div>
           )}
         </section>

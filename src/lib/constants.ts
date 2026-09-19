@@ -19,6 +19,19 @@ export const ALLOWED_TRANSITIONS: Record<RepairStatus, RepairStatus[]> = {
 
 export const OPEN_STATUSES: RepairStatus[] = ["received", "in_progress", "ready"];
 
+/**
+ * الخطوة التالية الطبيعية لكل حالة.
+ *
+ * الموظف يفتح التذكرة ليفعل شيئاً واحداً غالباً، فنقدّمه كزر واحد كبير بدل
+ * قائمة خيارات متساوية يضطر للاختيار منها في كل مرة. البقية تبقى متاحة خلف
+ * "خيارات أخرى".
+ */
+export const PRIMARY_NEXT: Partial<Record<RepairStatus, { to: RepairStatus; label: string }>> = {
+  received: { to: "in_progress", label: "بدء العمل" },
+  in_progress: { to: "ready", label: "تمّ العمل — جاهزة للتسليم" },
+  ready: { to: "delivered", label: "تسليم للزبون" },
+};
+
 export const PHOTO_STAGE: Record<PhotoStage, string> = {
   intake: "عند الاستلام",
   progress: "أثناء العمل",
