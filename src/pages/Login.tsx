@@ -121,6 +121,7 @@ export default function Login() {
           {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
           <button type="submit" className="btn-primary w-full" disabled={busy}>
+            {busy && <span className="spinner" />}
             {busy ? "جارٍ الدخول…" : "دخول"}
           </button>
         </form>

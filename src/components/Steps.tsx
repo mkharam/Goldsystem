@@ -22,7 +22,7 @@ export function Steps({ labels, current }: { labels: string[]; current: number }
                       : "bg-slate-200 text-slate-500"
                 }`}
               >
-                {done ? "✓" : ["١", "٢", "٣", "٤"][index]}
+                {done ? <span className="pop-check">✓</span> : ["١", "٢", "٣", "٤"][index]}
               </span>
               {index < labels.length - 1 && (
                 <span className={`h-1 flex-1 rounded-full ${done ? "bg-brand-600" : "bg-slate-200"}`} />

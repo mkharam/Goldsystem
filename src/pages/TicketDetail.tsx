@@ -286,6 +286,7 @@ export default function TicketDetail() {
                 {actionError && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{actionError}</p>}
 
                 <button type="button" onClick={onTransition} className="btn-success w-full py-3" disabled={busy}>
+                  {busy && <span className="spinner" />}
                   {busy ? "جارٍ الحفظ…" : target === "delivered" ? "تأكيد التسليم" : `تغيير إلى ${REPAIR_STATUS[target].label}`}
                 </button>
               </div>

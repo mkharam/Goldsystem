@@ -67,7 +67,7 @@ export default function Track() {
           <p className="text-sm text-gold-300/70">متابعة حالة الصيانة</p>
         </div>
 
-        <div className="card overflow-hidden">
+        <div className="card card-enter overflow-hidden">
           {/* الحالة أولاً وبأكبر خط: الزبون يفتح الصفحة ليعرفها، لا ليقرأ تفاصيل. */}
           <div
             className={`px-5 py-6 text-center ${
@@ -112,7 +112,7 @@ export default function Track() {
                     <span className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
                       done ? "bg-brand-500 text-white" : "bg-slate-200 text-slate-400"
                     }`}>
-                      {done ? "✓" : index + 1}
+                      {done ? <span className="pop-check">✓</span> : index + 1}
                     </span>
                     <div>
                       <p className={`font-medium ${active ? "text-brand-700" : done ? "text-slate-700" : "text-slate-400"}`}>

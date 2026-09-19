@@ -89,7 +89,7 @@ export default function Tickets() {
         <p className="card p-6 text-center text-sm text-slate-500">لا توجد تذاكر مطابقة</p>
       ) : (
         <div className="space-y-2">
-          {tickets.map((t) => <TicketCard key={t.id} ticket={t} />)}
+          {tickets.map((t, i) => <TicketCard key={t.id} ticket={t} index={i} />)}
         </div>
       )}
     </AppShell>

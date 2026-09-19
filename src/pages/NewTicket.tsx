@@ -415,6 +415,7 @@ export default function NewTicket() {
           </button>
         ) : (
           <button type="button" onClick={onSave} className="btn-success flex-1 py-4 text-base" disabled={busy}>
+            {busy && <span className="spinner" />}
             {busy ? "جارٍ الحفظ…" : "حفظ وطباعة الإيصال"}
           </button>
         )}

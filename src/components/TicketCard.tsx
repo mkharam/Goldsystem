@@ -4,7 +4,7 @@ import { formatWeight, overdueLabel, daysFromNow } from "@/lib/format";
 import { OPEN_STATUSES } from "@/lib/constants";
 import type { TicketWithRelations } from "@/lib/types";
 
-export function TicketCard({ ticket }: { ticket: TicketWithRelations }) {
+export function TicketCard({ ticket, index = 0 }: { ticket: TicketWithRelations; index?: number }) {
   const isOpen = OPEN_STATUSES.includes(ticket.status);
   const days = daysFromNow(ticket.promised_at);
   const isOverdue = isOpen && days !== null && days < 0;
@@ -13,9 +13,12 @@ export function TicketCard({ ticket }: { ticket: TicketWithRelations }) {
   return (
     <Link
       to={`/tickets/${ticket.id}`}
-      className={`card block p-3 transition hover:border-gold-300 hover:shadow ${
+      className={`card card-enter block p-3 transition hover:border-gold-300 hover:shadow active:scale-[0.98] ${
         isOverdue ? "border-red-200 bg-red-50/40" : ""
       }`}
+      // تتالي خفيف عند ظهور القائمة، محدود بأول ثماني بطاقات حتى لا تصبح
+      // القائمة الطويلة بطيئة الظهور.
+      style={{ animationDelay: `${Math.min(index, 8) * 35}ms` }}
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">

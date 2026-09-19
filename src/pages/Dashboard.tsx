@@ -86,7 +86,7 @@ export default function Dashboard() {
           <p className="card p-4 text-center text-sm text-slate-500">لا توجد تذاكر متأخّرة</p>
         ) : (
           <div className="space-y-2">
-            {overdue.map((t) => <TicketCard key={t.id} ticket={t} />)}
+            {overdue.map((t, i) => <TicketCard key={t.id} ticket={t} index={i} />)}
           </div>
         )}
       </section>
@@ -98,7 +98,7 @@ export default function Dashboard() {
             <Link to="/tickets?status=ready" className="text-sm text-gold-700 hover:underline">الكل</Link>
           </div>
           <div className="space-y-2">
-            {ready.map((t) => <TicketCard key={t.id} ticket={t} />)}
+            {ready.map((t, i) => <TicketCard key={t.id} ticket={t} index={i} />)}
           </div>
         </section>
       )}
