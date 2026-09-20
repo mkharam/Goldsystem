@@ -1,6 +1,6 @@
 import { supabase } from "./supabase";
 import { OPEN_STATUSES, ALLOWED_TRANSITIONS } from "./constants";
-import { setItemStatus, lookupCustomers, createInventoryCustomer } from "./inventory";
+import { setItemStatus, lookupCustomers, createInventoryCustomer, syncTickets } from "./inventory";
 import { phoneDigits } from "./constants";
 import type { RepairStatus, TicketWithRelations, StatusHistoryEntry, RepairPhoto, Customer } from "./types";
 
@@ -190,6 +190,7 @@ export async function createTicket(input: CreateTicketInput): Promise<TicketWith
   // نموذج الاستلام لم يعد يربط بقطعة من المخزون (أُلغي حقل الباركود)، لكن
   // الحقل باقٍ في المخطط فنحترمه إن وُجد في تذكرة قديمة أو ربط لاحق.
   if (input.inventory_product_id) void setItemStatus(input.inventory_product_id, "in_repair");
+  void syncTickets({ ticketIds: [ticket.id] });
 
   return ticket;
 }
@@ -268,6 +269,7 @@ export async function transitionTicket(input: TransitionInput): Promise<Transiti
   if (ticket.inventory_product_id && (input.to === "delivered" || input.to === "cancelled")) {
     void setItemStatus(ticket.inventory_product_id, "sold");
   }
+  void syncTickets({ ticketIds: [input.ticketId] });
 
   return { ok: true };
 }

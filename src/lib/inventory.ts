@@ -84,6 +84,17 @@ export async function setItemStatus(productId: string, status: "in_repair" | "av
   });
 }
 
+/**
+ * يدفع لقطة التذاكر إلى المخزون ليراها المدير في صفحة «الصيانة». الخادم يقرأ
+ * التذاكر من قاعدتنا بنفسه — نرسل معرّفات فقط. اختياري كسابقه: لا يفشل العملية.
+ * `all` مزامنة شاملة (للمدير).
+ */
+export async function syncTickets(input: { ticketIds: string[] } | { all: true }): Promise<boolean> {
+  const body = "all" in input ? { all: true } : { ticket_ids: input.ticketIds };
+  const res = await call("repairs/sync", { method: "POST", body: JSON.stringify(body) });
+  return res.ok;
+}
+
 export async function inventoryHealth(): Promise<"ok" | "down"> {
   const res = await call<{ ok: boolean }>("health");
   return res.ok ? "ok" : "down";
