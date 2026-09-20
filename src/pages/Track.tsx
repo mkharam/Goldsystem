@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { FUNCTIONS_URL } from "@/lib/supabase";
 import { REPAIR_STATUS, OPEN_STATUSES } from "@/lib/constants";
@@ -7,6 +7,7 @@ import { Logo } from "@/components/Logo";
 import type { RepairStatus } from "@/lib/types";
 
 const STEPS: RepairStatus[] = ["received", "in_progress", "ready", "delivered"];
+const POLL_MS = 20_000;
 
 type TrackData = {
   ticket: {
@@ -29,18 +30,55 @@ export default function Track() {
   const { token } = useParams<{ token: string }>();
   const [data, setData] = useState<TrackData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [justUpdated, setJustUpdated] = useState(false);
+  const prevStatus = useRef<RepairStatus | null>(null);
 
-  useEffect(() => {
-    if (!token) return;
-    // صفحة عامة: لا تمرّ بـ Supabase مباشرة — دالة track وحدها تقرّر ما يُعرض.
-    fetch(`${FUNCTIONS_URL}/track?token=${encodeURIComponent(token)}`)
-      .then(async (res) => {
+  const load = useCallback(
+    async (silent: boolean) => {
+      if (!token) return;
+      try {
+        // صفحة عامة: لا تمرّ بـ Supabase مباشرة — دالة track وحدها تقرّر ما يُعرض.
+        const res = await fetch(`${FUNCTIONS_URL}/track?token=${encodeURIComponent(token)}`);
         if (res.status === 404 || res.status === 400) throw new Error("لم نعثر على هذه التذكرة");
         if (!res.ok) throw new Error("تعذّر تحميل حالة التذكرة");
-        setData(await res.json());
-      })
-      .catch((err) => setError(err instanceof Error ? err.message : "خطأ"));
-  }, [token]);
+        const next: TrackData = await res.json();
+
+        if (silent && prevStatus.current && prevStatus.current !== next.ticket.status) {
+          setJustUpdated(true);
+          setTimeout(() => setJustUpdated(false), 2500);
+          try { navigator.vibrate?.(15); } catch { /* اهتزاز اختياري فقط */ }
+        }
+        prevStatus.current = next.ticket.status;
+        setData(next);
+      } catch (err) {
+        if (!silent) setError(err instanceof Error ? err.message : "خطأ");
+      }
+    },
+    [token],
+  );
+
+  useEffect(() => {
+    void load(false);
+  }, [load]);
+
+  // تحديث دوري لطيف بدل ضغط "تحديث" يدوي — الزبون قد يترك الصفحة مفتوحة
+  // وهو ينتظر. يتوقّف حين تكون التبويبة مخفية، وحين تصل الحالة لنهايتها
+  // (مسلّمة/ملغاة) فلا داعي للاستمرار في الاستعلام.
+  useEffect(() => {
+    if (!data) return;
+    const terminal = data.ticket.status === "delivered" || data.ticket.status === "cancelled";
+    if (terminal) return;
+
+    const tick = () => {
+      if (document.visibilityState === "visible") void load(true);
+    };
+    const interval = setInterval(tick, POLL_MS);
+    document.addEventListener("visibilitychange", tick);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", tick);
+    };
+  }, [data, load]);
 
   if (error) {
     return (
@@ -58,6 +96,20 @@ export default function Track() {
   const currentStep = STEPS.indexOf(ticket.status);
   const isCancelled = ticket.status === "cancelled";
 
+  const shareText = `تتبّع حالة صيانة قطعتي (${ticket.ticket_number}): ${window.location.href}`;
+  async function share() {
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: data!.shop_name, text: shareText, url: window.location.href });
+        return;
+      } catch {
+        // المستخدم ألغى المشاركة — لا حاجة لفتح واتساب بعدها.
+        return;
+      }
+    }
+    window.open(`https://wa.me/?text=${encodeURIComponent(shareText)}`, "_blank", "noopener");
+  }
+
   return (
     <div className="brand-surface min-h-dvh px-4 py-8">
       <div className="mx-auto max-w-md">
@@ -70,7 +122,7 @@ export default function Track() {
         <div className="card card-enter overflow-hidden">
           {/* الحالة أولاً وبأكبر خط: الزبون يفتح الصفحة ليعرفها، لا ليقرأ تفاصيل. */}
           <div
-            className={`px-5 py-6 text-center ${
+            className={`relative px-5 py-6 text-center transition-colors duration-500 ${
               isCancelled
                 ? "bg-red-50"
                 : ticket.status === "ready"
@@ -80,6 +132,11 @@ export default function Track() {
                     : "bg-gold-50"
             }`}
           >
+            {justUpdated && (
+              <span className="absolute left-3 top-3 rounded-full bg-white/90 px-2 py-0.5 text-[10px] font-bold text-brand-700 shadow">
+                تحديث جديد
+              </span>
+            )}
             <p className={`text-2xl font-bold ${ticket.status === "ready" ? "text-white" : "text-brand-800"}`}>
               {isCancelled ? "أُلغيت" : REPAIR_STATUS[ticket.status].label}
             </p>
@@ -109,7 +166,7 @@ export default function Track() {
 
                 return (
                   <li key={step} className="flex items-start gap-3">
-                    <span className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+                    <span className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold transition-colors duration-500 ${
                       done ? "bg-brand-500 text-white" : "bg-slate-200 text-slate-400"
                     }`}>
                       {done ? <span className="pop-check">✓</span> : index + 1}
@@ -143,9 +200,14 @@ export default function Track() {
             </div>
           )}
 
-            {ticket.branch_phone && (
-              <a href={`tel:${ticket.branch_phone}`} className="btn-ghost mt-5 w-full">اتصل بالفرع</a>
-            )}
+            <div className="mt-5 flex gap-2">
+              {ticket.branch_phone && (
+                <a href={`tel:${ticket.branch_phone}`} className="btn-ghost flex-1">اتصل بالفرع</a>
+              )}
+              <button type="button" onClick={share} className="btn-ghost flex-1">
+                مشاركة الرابط
+              </button>
+            </div>
           </div>
         </div>
 

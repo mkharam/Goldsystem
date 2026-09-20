@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { AppShell } from "@/components/AppShell";
 import { Steps } from "@/components/Steps";
 import { useAuth } from "@/lib/auth";
+import { buzz } from "@/lib/haptics";
 import { supabase, PHOTO_BUCKET } from "@/lib/supabase";
 import { inventoryHealth } from "@/lib/inventory";
 import {
@@ -153,6 +154,7 @@ export default function NewTicket() {
       });
 
       await uploadPhotos(ticket.id);
+      buzz([15, 60, 15]); // نبضتان: تُحسّ بوضوح كتأكيد "تم" دون أن تكون طويلة مزعجة.
       // الإيصال فوراً بعد الاستلام — الزبون واقف ينتظره.
       navigate(`/tickets/${ticket.id}/receipt`);
     } catch (err) {

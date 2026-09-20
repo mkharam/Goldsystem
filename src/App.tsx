@@ -1,5 +1,6 @@
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/lib/auth";
+import { ToastProvider } from "@/lib/toast";
 import Login from "@/pages/Login";
 import Dashboard from "@/pages/Dashboard";
 import Tickets from "@/pages/Tickets";
@@ -24,6 +25,7 @@ function Protected({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   return (
+    <ToastProvider>
     <AuthProvider>
       {/* basename يجعل المسارات تعمل تحت /Goldsystem/ على GitHub Pages ومن الجذر محلياً. */}
       <BrowserRouter basename={import.meta.env.BASE_URL}>
@@ -42,5 +44,6 @@ export default function App() {
         </Routes>
       </BrowserRouter>
     </AuthProvider>
+    </ToastProvider>
   );
 }

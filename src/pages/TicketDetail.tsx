@@ -3,6 +3,8 @@ import { Link, useParams } from "react-router-dom";
 import { AppShell } from "@/components/AppShell";
 import { StatusBadge } from "@/components/StatusBadge";
 import { useAuth } from "@/lib/auth";
+import { useToast } from "@/lib/toast";
+import { buzz } from "@/lib/haptics";
 import { supabase, signedPhotoUrls, PHOTO_BUCKET } from "@/lib/supabase";
 import {
   getTicket, getStatusHistory, getPhotos, transitionTicket, getSettings,
@@ -16,6 +18,7 @@ import type { RepairStatus, TicketWithRelations, StatusHistoryEntry, RepairPhoto
 export default function TicketDetail() {
   const { id } = useParams<{ id: string }>();
   const { staff } = useAuth();
+  const toast = useToast();
 
   const [ticket, setTicket] = useState<TicketWithRelations | null>(null);
   const [history, setHistory] = useState<StatusHistoryEntry[]>([]);
@@ -104,6 +107,8 @@ export default function TicketDetail() {
     setWeightOut(""); setWorkDone(""); setFinalCost(""); setNote(""); setVarianceNote(""); setAcceptVariance(false);
     await reload();
     setBusy(false);
+    buzz();
+    toast(target === "delivered" ? "تم تسليم القطعة" : "تم تحديث الحالة");
   }
 
   async function notifyWhatsApp() {
@@ -133,10 +138,12 @@ export default function TicketDetail() {
       message_preview: message.slice(0, 300),
       sent_by: staff.staff_id,
     });
+    toast("تم فتح واتساب للزبون");
   }
 
   async function addPhotos(fileList: FileList | null, stage: "progress" | "delivery") {
     if (!fileList || !ticket || !staff) return;
+    let uploaded = 0;
     for (const file of Array.from(fileList)) {
       const ext = file.name.split(".").pop()?.toLowerCase() ?? "jpg";
       const path = `${ticket.id}/${stage}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
@@ -151,8 +158,11 @@ export default function TicketDetail() {
         uploaded_by: staff.staff_id,
         is_public: stage !== "progress",
       });
+      uploaded++;
     }
     await reload();
+    if (uploaded > 0) toast(uploaded === 1 ? "تم رفع الصورة" : `تم رفع ${uploaded} صور`);
+    else if (fileList.length > 0) toast("تعذّر رفع الصور", "error");
   }
 
   return (

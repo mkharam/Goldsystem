@@ -27,9 +27,11 @@ export default function Dashboard() {
   const [ready, setReady] = useState<TicketWithRelations[]>([]);
   const [inventoryDown, setInventoryDown] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let active = true;
+    setLoading(true);
     const branchId = branch === "all" ? undefined : branch;
     (async () => {
       try {
@@ -45,6 +47,7 @@ export default function Dashboard() {
       } catch (err) {
         if (active) setError(err instanceof Error ? err.message : "تعذّر تحميل البيانات");
       }
+      if (active) setLoading(false);
       const health = await inventoryHealth();
       if (active) setInventoryDown(health === "down");
     })();
@@ -63,11 +66,17 @@ export default function Dashboard() {
 
       <BranchPicker branches={branches} value={branch} onChange={setBranch} />
 
-      <div className="grid grid-cols-3 gap-2">
-        <StatCard label="متأخّرة" value={stats?.overdue ?? 0} tone="text-red-700" />
-        <StatCard label="جاهزة" value={stats?.ready ?? 0} tone="text-brand-700" />
-        <StatCard label="قيد العمل" value={stats?.inProgress ?? 0} tone="text-slate-800" />
-      </div>
+      {loading ? (
+        <div className="grid grid-cols-3 gap-2">
+          {[0, 1, 2].map((i) => <div key={i} className="card h-[60px] animate-pulse bg-slate-100" />)}
+        </div>
+      ) : (
+        <div className="grid grid-cols-3 gap-2">
+          <StatCard label="متأخّرة" value={stats?.overdue ?? 0} tone="text-red-700" />
+          <StatCard label="جاهزة" value={stats?.ready ?? 0} tone="text-brand-700" />
+          <StatCard label="قيد العمل" value={stats?.inProgress ?? 0} tone="text-slate-800" />
+        </div>
+      )}
 
       <section className="mt-6">
         <div className="mb-2 flex items-center justify-between">
@@ -82,8 +91,13 @@ export default function Dashboard() {
           )}
         </div>
 
-        {overdue.length === 0 ? (
-          <p className="card p-4 text-center text-sm text-slate-500">لا توجد تذاكر متأخّرة</p>
+        {loading ? (
+          <div className="card h-[72px] animate-pulse bg-slate-100" />
+        ) : overdue.length === 0 ? (
+          <div className="card card-enter p-6 text-center">
+            <p className="mb-1 text-2xl">✨</p>
+            <p className="text-sm text-slate-500">لا توجد تذاكر متأخّرة — كل شيء على وقته</p>
+          </div>
         ) : (
           <div className="space-y-2">
             {overdue.map((t, i) => <TicketCard key={t.id} ticket={t} index={i} />)}
@@ -91,7 +105,7 @@ export default function Dashboard() {
         )}
       </section>
 
-      {ready.length > 0 && (
+      {!loading && ready.length > 0 && (
         <section className="mt-6">
           <div className="mb-2 flex items-center justify-between">
             <h2 className="font-bold text-slate-900">جاهزة للتسليم</h2>
