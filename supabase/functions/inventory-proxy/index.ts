@@ -121,7 +121,19 @@ Deno.serve(async (req) => {
         headers: { "Content-Type": "application/json", "x-api-key": INVENTORY_KEY },
         body: JSON.stringify({ tickets }),
       });
-      return new Response(await upstream.text(), {
+      const text = await upstream.text();
+      // المخزون ينشئ الزبون أو يطابقه بالهاتف ويُعيد معرّفه — نحفظه عندنا فلا يتكرر.
+      if (upstream.ok) {
+        try {
+          const links: { ticket_id: string; customer_id: string }[] = JSON.parse(text).customer_links ?? [];
+          const localByTicket = new Map((rows ?? []).map((r: any) => [r.id, r.customer_id]));
+          for (const l of links) {
+            const localId = localByTicket.get(l.ticket_id);
+            if (localId) await admin.from("customers").update({ inventory_customer_id: l.customer_id }).eq("id", localId).is("inventory_customer_id", null);
+          }
+        } catch { /* الربط تحسين لا شرط — لا نُفشل المزامنة بسببه */ }
+      }
+      return new Response(text, {
         status: upstream.status,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
