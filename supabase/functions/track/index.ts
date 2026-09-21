@@ -10,7 +10,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "GET, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
 };
 
 const json = (body: unknown, status = 200) =>
@@ -21,6 +21,32 @@ const json = (body: unknown, status = 200) =>
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+
+  // ——— تقييم الزبون (POST) ———
+  // الرمز وحده يُثبت أن الزبون صاحب التذكرة. نقبل تقييماً واحداً لتذكرة مسلّمة فقط.
+  if (req.method === "POST") {
+    const body = await req.json().catch(() => ({}));
+    const postToken = String(body?.token ?? "").trim();
+    const rating = Number(body?.rating);
+    if (!/^[0-9a-f]{32}$/.test(postToken)) return json({ error: "invalid_token" }, 400);
+    if (!Number.isInteger(rating) || rating < 1 || rating > 5) return json({ error: "invalid_rating" }, 400);
+    const rawComment = typeof body?.comment === "string" ? body.comment.trim() : "";
+    const comment = rawComment ? rawComment.slice(0, 500) : null;
+
+    const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const { data: t } = await db.from("repair_tickets").select("id, status").eq("tracking_token", postToken).maybeSingle();
+    if (!t) return json({ error: "not_found" }, 404);
+    if (t.status !== "delivered") return json({ error: "not_delivered" }, 409);
+
+    const { error: insErr } = await db.from("repair_feedback").insert({ ticket_id: t.id, rating, comment });
+    if (insErr) {
+      // 23505 = تقييم موجود أصلاً — لا نسمح بتعديله (يمنع تبديل التقييم بعد قراءته).
+      if ((insErr as { code?: string }).code === "23505") return json({ error: "already_rated" }, 409);
+      console.error("feedback insert failed", insErr.message);
+      return json({ error: "server_error" }, 500);
+    }
+    return json({ ok: true });
+  }
 
   const token = (new URL(req.url).searchParams.get("token") ?? "").trim();
   // الرمز دائماً 32 محرفاً ست عشرياً؛ رفض ما عداه يوفّر استعلاماً ويقطع العبث.
@@ -42,6 +68,12 @@ Deno.serve(async (req) => {
     return json({ error: "server_error" }, 500);
   }
   if (!ticket) return json({ error: "not_found" }, 404);
+
+  const { data: fb } = await admin
+    .from("repair_feedback")
+    .select("rating, comment")
+    .eq("ticket_id", ticket.id)
+    .maybeSingle();
 
   // صور الاستلام والتسليم فقط — صور العمل الداخلي لا تخصّ الزبون.
   const { data: photos } = await admin
@@ -78,6 +110,7 @@ Deno.serve(async (req) => {
       branch_phone: (ticket as any).branch?.phone ?? null,
     },
     photos: photoUrls,
+    feedback: fb ? { rating: fb.rating, comment: fb.comment } : null,
     shop_name: shop.shop_name ?? "مجوهرات",
     receipt_footer: shop.receipt_footer ?? "",
   });

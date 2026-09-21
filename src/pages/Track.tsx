@@ -22,9 +22,81 @@ type TrackData = {
     branch_phone: string | null;
   };
   photos: string[];
+  feedback: { rating: number; comment: string | null } | null;
   shop_name: string;
   receipt_footer: string;
 };
+
+/** تقييم الزبون بعد التسليم: نجوم وتعليق اختياري، مرة واحدة. */
+function RatingBox({ token, existing, onDone }: {
+  token: string;
+  existing: { rating: number; comment: string | null } | null;
+  onDone: (fb: { rating: number; comment: string | null }) => void;
+}) {
+  const [rating, setRating] = useState(0);
+  const [comment, setComment] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  if (existing) {
+    return (
+      <div className="mt-5 rounded-xl bg-gold-50 p-4 text-center">
+        <p className="text-sm text-slate-600">شكراً لتقييمكم</p>
+        <p className="mt-1 text-2xl text-gold-600" aria-label={`${existing.rating} من 5`}>
+          {"★".repeat(existing.rating)}<span className="text-slate-300">{"★".repeat(5 - existing.rating)}</span>
+        </p>
+      </div>
+    );
+  }
+
+  async function send() {
+    if (rating < 1) return setErr("اختر عدد النجوم");
+    setBusy(true);
+    setErr(null);
+    try {
+      const res = await fetch(`${FUNCTIONS_URL}/track`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token, rating, comment }),
+      });
+      if (res.ok || res.status === 409) onDone({ rating, comment: comment.trim() || null });
+      else setErr("تعذّر إرسال التقييم — حاول لاحقاً");
+    } catch {
+      setErr("تعذّر إرسال التقييم — تحقّق من الإنترنت");
+    }
+    setBusy(false);
+  }
+
+  return (
+    <div className="mt-5 rounded-xl border border-gold-200 bg-gold-50 p-4">
+      <p className="mb-2 text-center font-semibold text-slate-800">كيف كانت تجربتك؟</p>
+      <div className="flex justify-center gap-1" dir="ltr">
+        {[1, 2, 3, 4, 5].map((n) => (
+          <button
+            key={n}
+            type="button"
+            onClick={() => setRating(n)}
+            aria-label={`${n} نجوم`}
+            className={`text-3xl transition ${n <= rating ? "text-gold-600" : "text-slate-300"}`}
+          >
+            ★
+          </button>
+        ))}
+      </div>
+      <textarea
+        className="field mt-3 min-h-[64px]"
+        maxLength={500}
+        placeholder="ملاحظة اختيارية"
+        value={comment}
+        onChange={(e) => setComment(e.target.value)}
+      />
+      {err && <p className="mt-2 text-center text-sm text-red-700">{err}</p>}
+      <button type="button" className="btn-primary mt-3 w-full" disabled={busy} onClick={send}>
+        {busy ? "جارٍ الإرسال…" : "أرسل التقييم"}
+      </button>
+    </div>
+  );
+}
 
 export default function Track() {
   const { token } = useParams<{ token: string }>();
@@ -198,6 +270,14 @@ export default function Track() {
                 ))}
               </div>
             </div>
+          )}
+
+          {ticket.status === "delivered" && token && (
+            <RatingBox
+              token={token}
+              existing={data.feedback}
+              onDone={(fb) => setData((d) => (d ? { ...d, feedback: fb } : d))}
+            />
           )}
 
             <div className="mt-5 flex gap-2">

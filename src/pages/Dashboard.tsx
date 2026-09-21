@@ -75,6 +75,10 @@ export default function Dashboard() {
   const [lastNotified, setLastNotified] = useState<Record<string, string>>({});
   const [reminderDays, setReminderDays] = useState(3);
   const [shopName, setShopName] = useState("");
+  const [lowRatings, setLowRatings] = useState<{
+    ticket_id: string; rating: number; comment: string | null; created_at: string;
+    ticket: { ticket_number: string; item_name: string; customer: { full_name: string } | null } | null;
+  }[]>([]);
   const [inventoryDown, setInventoryDown] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -103,6 +107,16 @@ export default function Dashboard() {
         if (!active) return;
         setReminderDays(Number(settings.pickup_reminder_days) || 3);
         setShopName(settings.shop_name);
+        // تقييمات منخفضة (نجمتان فأقل) — للمدير والمشرف لا الموظف؛ RLS تحصر المشرف بفرعه.
+        if (staff && staff.role !== "employee") {
+          const { data: low } = await supabase
+            .from("repair_feedback")
+            .select("ticket_id, rating, comment, created_at, ticket:repair_tickets(ticket_number, item_name, customer:customers(full_name))")
+            .lte("rating", 2)
+            .order("created_at", { ascending: false })
+            .limit(10);
+          if (active) setLowRatings((low ?? []) as unknown as typeof lowRatings);
+        }
         const latest: Record<string, string> = {};
         for (const n of notes.data ?? []) if (!latest[n.ticket_id]) latest[n.ticket_id] = n.created_at;
         setLastNotified(latest);
@@ -190,6 +204,31 @@ export default function Dashboard() {
                   }}
                 />
               </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {lowRatings.length > 0 && (
+        <section className="mt-6">
+          <h2 className="mb-2 font-bold text-slate-900">
+            تقييمات منخفضة{" "}
+            <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs text-red-700">{lowRatings.length}</span>
+          </h2>
+          <div className="space-y-2">
+            {lowRatings.map((f) => (
+              <Link key={f.ticket_id} to={`/tickets/${f.ticket_id}`} className="card block p-3 hover:bg-slate-50">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="truncate font-medium text-slate-800">
+                    {f.ticket?.item_name ?? "—"} · {f.ticket?.customer?.full_name ?? ""}
+                  </span>
+                  <span className="shrink-0 text-gold-600" aria-label={`${f.rating} من 5`}>
+                    {"★".repeat(f.rating)}<span className="text-slate-300">{"★".repeat(5 - f.rating)}</span>
+                  </span>
+                </div>
+                <p className="mt-0.5 font-mono text-xs text-slate-400">{f.ticket?.ticket_number}</p>
+                {f.comment && <p className="mt-1 text-sm text-slate-600">{f.comment}</p>}
+              </Link>
             ))}
           </div>
         </section>

@@ -38,7 +38,9 @@ export function buildMessage(ticket: TicketWithRelations, kind: WhatsAppKind, sh
     `السلام عليكم ${ticket.customer?.full_name ?? ""}،`,
     BODY[kind](ticket.item_name),
     `رقم التذكرة: ${ticket.ticket_number}`,
-    `لمتابعة الحالة: ${trackingUrl(ticket.tracking_token)}`,
+    kind === "delivered"
+      ? `يسعدنا تقييمكم لتجربتكم (من نجمة إلى خمس): ${trackingUrl(ticket.tracking_token)}`
+      : `لمتابعة الحالة: ${trackingUrl(ticket.tracking_token)}`,
     shopName,
   ].filter(Boolean).join("\n");
 }

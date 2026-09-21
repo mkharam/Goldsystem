@@ -29,6 +29,7 @@ export default function TicketDetail() {
   const [loading, setLoading] = useState(true);
   // هل أُبلغ الزبون بأن القطعة جاهزة؟ (آخر إشعار بعد لحظة الجاهزية)
   const [notifiedSinceReady, setNotifiedSinceReady] = useState(true);
+  const [feedback, setFeedback] = useState<{ rating: number; comment: string | null } | null>(null);
 
   const [target, setTarget] = useState<RepairStatus | null>(null);
   const [weightOut, setWeightOut] = useState("");
@@ -51,6 +52,10 @@ export default function TicketDetail() {
     setSettings(s);
     setUrls(await signedPhotoUrls(p.map((x) => x.storage_path)));
     setDeliveredTo(t?.customer?.full_name ?? "");
+    if (t?.status === "delivered") {
+      const { data: fb } = await supabase.from("repair_feedback").select("rating, comment").eq("ticket_id", t.id).maybeSingle();
+      setFeedback(fb ?? null);
+    }
     if (t?.status === "ready") {
       const { count } = await supabase
         .from("repair_notifications")
@@ -298,6 +303,22 @@ export default function TicketDetail() {
         <section className="card mb-4 border-gold-500 bg-gold-50 p-4">
           <p className="mb-2 font-bold text-slate-900">القطعة جاهزة — لم يُبلَّغ الزبون بعد</p>
           <button type="button" onClick={notifyWhatsApp} className="btn-success w-full">أبلغ الزبون الآن عبر واتساب</button>
+        </section>
+      )}
+
+      {ticket.status === "delivered" && (
+        <section className="card mb-4 p-4">
+          <h2 className="mb-1 font-bold text-slate-900">تقييم الزبون</h2>
+          {feedback ? (
+            <>
+              <p className="text-xl text-gold-600" aria-label={`${feedback.rating} من 5`}>
+                {"★".repeat(feedback.rating)}<span className="text-slate-300">{"★".repeat(5 - feedback.rating)}</span>
+              </p>
+              {feedback.comment && <p className="mt-1 text-sm text-slate-600">{feedback.comment}</p>}
+            </>
+          ) : (
+            <p className="text-sm text-slate-400">لم يقيّم الزبون بعد — يصله رابط التقييم في رسالة التسليم.</p>
+          )}
         </section>
       )}
 
