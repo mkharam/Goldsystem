@@ -6,7 +6,7 @@ import { Logo } from "@/components/Logo";
 
 export default function Login() {
   const { staff, loading, signIn } = useAuth();
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [detail, setDetail] = useState<string[]>([]);
@@ -20,7 +20,7 @@ export default function Login() {
     setBusy(true);
     setError(null);
     setDetail([]);
-    const result = await signIn(email, password);
+    const result = await signIn(username, password);
     if (!result.ok) {
       setError(result.error);
       setDetail(result.detail);
@@ -69,10 +69,10 @@ export default function Login() {
 
         <form onSubmit={onSubmit} className="space-y-4">
           <div>
-            <label className="label" htmlFor="email">البريد الإلكتروني</label>
+            <label className="label" htmlFor="username">اسم المستخدم</label>
             <input
-              id="email"
-              type="email"
+              id="username"
+              type="text"
               required
               autoComplete="username"
               autoCapitalize="none"
@@ -80,9 +80,9 @@ export default function Login() {
               spellCheck={false}
               dir="ltr"
               className="field text-left"
-              placeholder="name@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              placeholder="username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
             />
           </div>
 

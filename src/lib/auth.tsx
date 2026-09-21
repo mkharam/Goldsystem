@@ -13,7 +13,7 @@ export type SignInResult = { ok: true } | { ok: false; error: string; detail: st
 type AuthState = {
   staff: SessionStaff | null;
   loading: boolean;
-  signIn: (email: string, password: string) => Promise<SignInResult>;
+  signIn: (username: string, password: string) => Promise<SignInResult>;
   signOut: () => Promise<void>;
 };
 
@@ -36,6 +36,19 @@ async function loadStaff(authUserId: string): Promise<SessionStaff | null> {
     role: data.role,
     branch_id: data.branch_id,
   };
+}
+
+/**
+ * حسابات المخزون تُنشأ باسم مستخدم فيُخزَّن بريداً على نطاق داخلي، والمدير العام
+ * الأصلي وحده يحمل بريداً قديماً. نطابق قاعدة المخزون نفسها حرفاً بحرف، وإلا
+ * لن يجد الدخول الحساب. ما فيه @ يمرّ كما هو.
+ */
+const USERNAME_DOMAIN = "lamaa.local";
+function usernameToEmail(input: string): string {
+  const v = input.trim().toLowerCase();
+  if (v.includes("@")) return v;
+  if (v === "admin") return "admin@lamaa.com";
+  return `${v}@${USERNAME_DOMAIN}`;
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -69,14 +82,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    * كاملاً حتى لو كان المخزون منقطعاً. وإن فشل، نطلب من دالة staff-auth أن
    * تتحقق من المخزون وتُنشئ الحساب، ثم نعيد المحاولة.
    */
-  async function signIn(email: string, password: string): Promise<SignInResult> {
-    const normalized = email.trim().toLowerCase();
+  async function signIn(username: string, password: string): Promise<SignInResult> {
+    const normalized = usernameToEmail(username);
     const detail: string[] = [];
-    detail.push(`بريد: "${normalized}" (${normalized.length} حرفاً)`);
+    detail.push(`المستخدم: "${username.trim()}" ← "${normalized}"`);
     detail.push(`طول كلمة المرور: ${password.length}`);
 
-    if (!normalized || !password) {
-      return { ok: false, error: "أدخل البريد وكلمة المرور", detail };
+    if (!username.trim() || !password) {
+      return { ok: false, error: "أدخل اسم المستخدم وكلمة المرور", detail };
     }
 
     const first = await supabase.auth.signInWithPassword({ email: normalized, password });
@@ -111,7 +124,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       detail.push(`staff-auth: ${provisioned.status} ${body.error ?? ""}`.trim());
 
       if (body.error === "invalid_credentials") {
-        return { ok: false, error: "البريد أو كلمة المرور غير صحيحة", detail };
+        return { ok: false, error: "اسم المستخدم أو كلمة المرور غير صحيحة", detail };
       }
       if (body.error === "inventory_unavailable" || body.error === "inventory_not_configured") {
         return {
