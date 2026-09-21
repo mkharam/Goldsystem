@@ -51,6 +51,9 @@ function usernameToEmail(input: string): string {
   return `${v}@${USERNAME_DOMAIN}`;
 }
 
+/** يطابق localPassword في staff-auth: Auth المحلي يشترط 6 محارف والمخزون يقبل أقل. */
+const localPassword = (p: string) => `${p}#gs-local`;
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [staff, setStaff] = useState<SessionStaff | null>(null);
   const [loading, setLoading] = useState(true);
@@ -92,7 +95,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { ok: false, error: "أدخل اسم المستخدم وكلمة المرور", detail };
     }
 
-    const first = await supabase.auth.signInWithPassword({ email: normalized, password });
+    // الحساب الحالي يستعمل الكلمة الملحقة؛ حسابات أُنشئت قبل ذلك تستعمل الخام (6+ محارف).
+    let first = await supabase.auth.signInWithPassword({ email: normalized, password: localPassword(password) });
+    if (first.error) first = await supabase.auth.signInWithPassword({ email: normalized, password });
     if (!first.error) {
       // الدخول نجح، لكن بلا صف موظف فعّال تمنع RLS كل شيء — نقولها صراحةً بدل
       // ترك المستخدم أمام واجهة فارغة.
@@ -136,7 +141,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { ok: false, error: "تعذّر تسجيل الدخول", detail };
     }
 
-    const second = await supabase.auth.signInWithPassword({ email: normalized, password });
+    const second = await supabase.auth.signInWithPassword({ email: normalized, password: localPassword(password) });
     if (second.error) {
       detail.push(`الدخول بعد التهيئة: ${second.error.status ?? "?"} ${second.error.message}`);
       return { ok: false, error: "تعذّر تسجيل الدخول بعد تهيئة الحساب", detail };

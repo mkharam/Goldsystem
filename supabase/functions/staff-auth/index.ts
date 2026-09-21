@@ -29,6 +29,12 @@ const INVENTORY_URL = Deno.env.get("INVENTORY_SUPABASE_URL") ?? "https://iiyaytf
 const INVENTORY_PUBLISHABLE_KEY =
   Deno.env.get("INVENTORY_SUPABASE_PUBLISHABLE_KEY") ?? "sb_publishable_QKc39JrtZOOvnjICFx_5Lw_DD33A7Ha";
 
+// المخزون يقبل كلمات مرور قصيرة (مثل 1234) بينما Auth هنا يشترط 6 محارف على الأقل.
+// كلمة المرور التي يكتبها الموظف تبقى كما هي عند التحقق من المخزون؛ أما حسابه المحلي
+// فيُنشأ بها مع لاحقة ثابتة. يجب أن تطابق الدالةُ ما في src/lib/auth.tsx حرفاً بحرف.
+// قرار المالك الصريح: يُقبل أن تكون كلمات المرور القصيرة في المخزون هي أضعف حلقة.
+const localPassword = (p: string) => `${p}#gs-local`;
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "method_not_allowed" }, 405);
@@ -148,11 +154,11 @@ Deno.serve(async (req) => {
 
   if (authUserId) {
     // مزامنة كلمة المرور في كل دخول ناجح، وإلا بقيت القديمة تعمل هنا بعد تغييرها هناك.
-    await admin.auth.admin.updateUserById(authUserId, { password });
+    await admin.auth.admin.updateUserById(authUserId, { password: localPassword(password) });
   } else {
     const { data: created, error: createErr } = await admin.auth.admin.createUser({
       email: normalizedEmail,
-      password,
+      password: localPassword(password),
       email_confirm: true,
       user_metadata: { full_name: profile.full_name },
     });
@@ -162,7 +168,7 @@ Deno.serve(async (req) => {
       const { data: list } = await admin.auth.admin.listUsers();
       const match = list?.users.find((u) => u.email?.toLowerCase() === normalizedEmail);
       if (!match) return json({ error: "provisioning_failed", detail: createErr?.message ?? "" }, 500);
-      await admin.auth.admin.updateUserById(match.id, { password });
+      await admin.auth.admin.updateUserById(match.id, { password: localPassword(password) });
       authUserId = match.id;
     } else {
       authUserId = created.user.id;
