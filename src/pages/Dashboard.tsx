@@ -64,7 +64,8 @@ export default function Dashboard() {
         + استلام قطعة جديدة
       </Link>
 
-      <BranchPicker branches={branches} value={branch} onChange={setBranch} />
+      {/* المبدّل للمدير العام فقط — غيره يرى فرعه وحده، وقاعدة البيانات تفرض ذلك أيضاً. */}
+      {staff?.role === "admin" && <BranchPicker branches={branches} value={branch} onChange={setBranch} />}
 
       {loading ? (
         <div className="grid grid-cols-3 gap-2">

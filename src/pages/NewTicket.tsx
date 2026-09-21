@@ -67,8 +67,10 @@ export default function NewTicket() {
         getSettings(),
         inventoryHealth(),
       ]);
-      setBranches(rows ?? []);
-      setBranchId(staff?.branch_id ?? rows?.[0]?.id ?? "");
+      // غير المدير العام لا يفتح تذكرة إلا في فرعه (وRLS ترفض غير ذلك).
+      const allowed = staff?.role === "admin" ? (rows ?? []) : (rows ?? []).filter((b) => b.id === staff?.branch_id);
+      setBranches(allowed);
+      setBranchId(staff?.branch_id ?? allowed[0]?.id ?? "");
       setPromisedAt(defaultPromisedAt(Number(settings.default_turnaround_days) || 3));
       setInventoryDown(health === "down");
     })();

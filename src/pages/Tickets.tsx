@@ -74,7 +74,8 @@ export default function Tickets() {
         )}
       </div>
 
-      <BranchPicker branches={branches} value={branch} onChange={setBranch} />
+      {/* المبدّل للمدير العام فقط — غيره يرى فرعه وحده، وقاعدة البيانات تفرض ذلك أيضاً. */}
+      {staff?.role === "admin" && <BranchPicker branches={branches} value={branch} onChange={setBranch} />}
 
       <div className="-mx-4 mb-4 overflow-x-auto px-4">
         <div className="flex w-max gap-2">
