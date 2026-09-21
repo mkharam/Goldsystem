@@ -4,7 +4,9 @@ import { AppShell } from "@/components/AppShell";
 import { TicketCard } from "@/components/TicketCard";
 import { BranchPicker, useBranches } from "@/components/BranchPicker";
 import { useAuth } from "@/lib/auth";
-import { getDashboardStats, listTickets, type DashboardStats } from "@/lib/tickets";
+import { getDashboardStats, getSettings, listTickets, type DashboardStats } from "@/lib/tickets";
+import { supabase } from "@/lib/supabase";
+import { notifyCustomer } from "@/lib/whatsapp";
 import { inventoryHealth, syncTickets } from "@/lib/inventory";
 import { useToast } from "@/lib/toast";
 import type { TicketWithRelations } from "@/lib/types";
@@ -18,6 +20,47 @@ function StatCard({ label, value, tone }: { label: string; value: number; tone: 
   );
 }
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * إجراء واتساب للتذكرة الجاهزة: «أبلغ» إن لم يُبلَّغ الزبون بعد جاهزيتها، «ذكّر» إن مرّت
+ * أيام التذكير على الجاهزية وعلى آخر إشعار دون تسليم، وإلا نُظهر فقط أنه أُبلغ.
+ */
+function ReadyAction({
+  ticket, lastNotifiedAt, reminderDays, onSend,
+}: {
+  ticket: TicketWithRelations;
+  lastNotifiedAt: string | null;
+  reminderDays: number;
+  onSend: (kind: "ready" | "reminder") => Promise<void>;
+}) {
+  const [busy, setBusy] = useState(false);
+  if (!ticket.customer?.phone) return null;
+
+  const readyAt = new Date(ticket.ready_at ?? ticket.received_at).getTime();
+  const notifiedAt = lastNotifiedAt ? new Date(lastNotifiedAt).getTime() : null;
+  const notifiedSinceReady = notifiedAt !== null && notifiedAt >= readyAt;
+  const dueForReminder =
+    notifiedSinceReady &&
+    Date.now() - readyAt >= reminderDays * DAY_MS &&
+    Date.now() - (notifiedAt as number) >= reminderDays * DAY_MS;
+
+  if (notifiedSinceReady && !dueForReminder) {
+    return <p className="mb-2 mt-1 text-center text-xs text-slate-400">✓ أُبلغ الزبون</p>;
+  }
+  const kind = notifiedSinceReady ? "reminder" : "ready";
+  return (
+    <button
+      type="button"
+      disabled={busy}
+      onClick={async () => { setBusy(true); await onSend(kind); setBusy(false); }}
+      className="btn-success mb-2 mt-1 w-full py-2 text-sm"
+    >
+      {kind === "ready" ? "أبلغ الزبون عبر واتساب" : "ذكّر الزبون بالاستلام"}
+    </button>
+  );
+}
+
 export default function Dashboard() {
   const { staff } = useAuth();
   const toast = useToast();
@@ -28,6 +71,10 @@ export default function Dashboard() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [overdue, setOverdue] = useState<TicketWithRelations[]>([]);
   const [ready, setReady] = useState<TicketWithRelations[]>([]);
+  // آخر إشعار واتساب لكل تذكرة جاهزة، وأيام التذكير، واسم المحل للرسالة.
+  const [lastNotified, setLastNotified] = useState<Record<string, string>>({});
+  const [reminderDays, setReminderDays] = useState(3);
+  const [shopName, setShopName] = useState("");
   const [inventoryDown, setInventoryDown] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -41,12 +88,24 @@ export default function Dashboard() {
         const [s, o, r] = await Promise.all([
           getDashboardStats(branchId),
           listTickets({ status: "overdue", limit: 10, branchId }),
-          listTickets({ status: "ready", limit: 5, branchId }),
+          listTickets({ status: "ready", limit: 20, branchId }),
         ]);
         if (!active) return;
         setStats(s);
         setOverdue(o);
         setReady(r);
+        const [settings, notes] = await Promise.all([
+          getSettings(),
+          r.length
+            ? supabase.from("repair_notifications").select("ticket_id, created_at").in("ticket_id", r.map((t) => t.id)).order("created_at", { ascending: false })
+            : Promise.resolve({ data: [] as { ticket_id: string; created_at: string }[] }),
+        ]);
+        if (!active) return;
+        setReminderDays(Number(settings.pickup_reminder_days) || 3);
+        setShopName(settings.shop_name);
+        const latest: Record<string, string> = {};
+        for (const n of notes.data ?? []) if (!latest[n.ticket_id]) latest[n.ticket_id] = n.created_at;
+        setLastNotified(latest);
       } catch (err) {
         if (active) setError(err instanceof Error ? err.message : "تعذّر تحميل البيانات");
       }
@@ -116,7 +175,22 @@ export default function Dashboard() {
             <Link to="/tickets?status=ready" className="text-sm text-gold-700 hover:underline">الكل</Link>
           </div>
           <div className="space-y-2">
-            {ready.map((t, i) => <TicketCard key={t.id} ticket={t} index={i} />)}
+            {ready.map((t, i) => (
+              <div key={t.id}>
+                <TicketCard ticket={t} index={i} />
+                <ReadyAction
+                  ticket={t}
+                  lastNotifiedAt={lastNotified[t.id] ?? null}
+                  reminderDays={reminderDays}
+                  onSend={async (kind) => {
+                    if (!staff) return;
+                    const ok = await notifyCustomer(t, kind, shopName, staff.staff_id);
+                    if (!ok) return toast("رقم الزبون غير صالح", "error");
+                    setLastNotified((m) => ({ ...m, [t.id]: new Date().toISOString() }));
+                  }}
+                />
+              </div>
+            ))}
           </div>
         </section>
       )}

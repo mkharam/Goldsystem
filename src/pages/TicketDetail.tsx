@@ -10,9 +10,10 @@ import {
   getTicket, getStatusHistory, getPhotos, transitionTicket, getSettings,
   toleranceFrom, checkWeight, type Settings,
 } from "@/lib/tickets";
-import { REPAIR_STATUS, PHOTO_STAGE, ALLOWED_TRANSITIONS, PRIMARY_NEXT, OPEN_STATUSES, normalizeDigits, phoneDigits } from "@/lib/constants";
+import { REPAIR_STATUS, PHOTO_STAGE, ALLOWED_TRANSITIONS, PRIMARY_NEXT, OPEN_STATUSES, normalizeDigits } from "@/lib/constants";
 import { formatDateTime, formatWeight, formatMoney, overdueLabel, daysFromNow } from "@/lib/format";
 import { trackingUrl } from "@/lib/qr";
+import { notifyCustomer, defaultKind } from "@/lib/whatsapp";
 import type { RepairStatus, TicketWithRelations, StatusHistoryEntry, RepairPhoto } from "@/lib/types";
 
 export default function TicketDetail() {
@@ -26,6 +27,8 @@ export default function TicketDetail() {
   const [urls, setUrls] = useState<Record<string, string>>({});
   const [settings, setSettings] = useState<Settings | null>(null);
   const [loading, setLoading] = useState(true);
+  // هل أُبلغ الزبون بأن القطعة جاهزة؟ (آخر إشعار بعد لحظة الجاهزية)
+  const [notifiedSinceReady, setNotifiedSinceReady] = useState(true);
 
   const [target, setTarget] = useState<RepairStatus | null>(null);
   const [weightOut, setWeightOut] = useState("");
@@ -48,6 +51,14 @@ export default function TicketDetail() {
     setSettings(s);
     setUrls(await signedPhotoUrls(p.map((x) => x.storage_path)));
     setDeliveredTo(t?.customer?.full_name ?? "");
+    if (t?.status === "ready") {
+      const { count } = await supabase
+        .from("repair_notifications")
+        .select("id", { count: "exact", head: true })
+        .eq("ticket_id", t.id)
+        .gte("created_at", t.ready_at ?? t.received_at);
+      setNotifiedSinceReady((count ?? 0) > 0);
+    }
     setLoading(false);
   }, [id]);
 
@@ -113,32 +124,10 @@ export default function TicketDetail() {
 
   async function notifyWhatsApp() {
     if (!ticket || !staff) return;
-    const body =
-      ticket.status === "ready"
-        ? `قطعتكم (${ticket.item_name}) جاهزة للاستلام.`
-        : ticket.status === "delivered"
-          ? `تم تسليم قطعتكم (${ticket.item_name}). شكراً لثقتكم.`
-          : `تحديث بخصوص قطعتكم (${ticket.item_name}) قيد الصيانة لدينا.`;
-
-    const message = [
-      `السلام عليكم ${ticket.customer?.full_name ?? ""}،`,
-      body,
-      `رقم التذكرة: ${ticket.ticket_number}`,
-      `لمتابعة الحالة: ${track}`,
-      settings?.shop_name ?? "",
-    ].join("\n");
-
-    // نفتح واتساب فوراً؛ السجل أثر جانبي لا يجوز أن يؤخّر الموظف.
-    window.open(`https://wa.me/${phoneDigits(ticket.customer?.phone ?? "")}?text=${encodeURIComponent(message)}`, "_blank", "noopener");
-
-    await supabase.from("repair_notifications").insert({
-      ticket_id: ticket.id,
-      channel: "whatsapp",
-      phone: ticket.customer?.phone ?? null,
-      message_preview: message.slice(0, 300),
-      sent_by: staff.staff_id,
-    });
+    const ok = await notifyCustomer(ticket, defaultKind(ticket.status), settings?.shop_name ?? "", staff.staff_id);
+    if (!ok) return toast("رقم الزبون غير صالح", "error");
     toast("تم فتح واتساب للزبون");
+    await reload();
   }
 
   async function addPhotos(fileList: FileList | null, stage: "progress" | "delivery") {
@@ -302,6 +291,13 @@ export default function TicketDetail() {
               </div>
             </>
           )}
+        </section>
+      )}
+
+      {ticket.status === "ready" && ticket.customer?.phone && !notifiedSinceReady && (
+        <section className="card mb-4 border-gold-500 bg-gold-50 p-4">
+          <p className="mb-2 font-bold text-slate-900">القطعة جاهزة — لم يُبلَّغ الزبون بعد</p>
+          <button type="button" onClick={notifyWhatsApp} className="btn-success w-full">أبلغ الزبون الآن عبر واتساب</button>
         </section>
       )}
 
