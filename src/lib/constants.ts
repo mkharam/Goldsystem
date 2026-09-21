@@ -44,7 +44,7 @@ export const STAFF_ROLE: Record<StaffRole, string> = {
   employee: "موظف",
 };
 
-export const KARAT_OPTIONS = ["18K", "21K", "22K", "24K"];
+export const KARAT_OPTIONS = ["18K", "21K"];
 
 export const ITEM_TYPE_OPTIONS = ["خاتم", "سلسلة", "أسورة", "حلق", "طقم", "خلخال", "دبلة", "أخرى"];
 
