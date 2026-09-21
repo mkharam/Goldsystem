@@ -5,7 +5,8 @@ import { TicketCard } from "@/components/TicketCard";
 import { BranchPicker, useBranches } from "@/components/BranchPicker";
 import { useAuth } from "@/lib/auth";
 import { getDashboardStats, listTickets, type DashboardStats } from "@/lib/tickets";
-import { inventoryHealth } from "@/lib/inventory";
+import { inventoryHealth, syncTickets } from "@/lib/inventory";
+import { useToast } from "@/lib/toast";
 import type { TicketWithRelations } from "@/lib/types";
 
 function StatCard({ label, value, tone }: { label: string; value: number; tone: string }) {
@@ -19,6 +20,8 @@ function StatCard({ label, value, tone }: { label: string; value: number; tone: 
 
 export default function Dashboard() {
   const { staff } = useAuth();
+  const toast = useToast();
+  const [syncing, setSyncing] = useState(false);
   const branches = useBranches();
   // نبدأ من فرع الموظف: ما يخصّه أولاً، وله أن يوسّع للكل.
   const [branch, setBranch] = useState<string | "all">(staff?.branch_id ?? "all");
@@ -115,6 +118,27 @@ export default function Dashboard() {
           <div className="space-y-2">
             {ready.map((t, i) => <TicketCard key={t.id} ticket={t} index={i} />)}
           </div>
+        </section>
+      )}
+
+      {staff?.role === "admin" && (
+        <section className="mt-8 border-t border-slate-200 pt-4">
+          <button
+            type="button"
+            disabled={syncing}
+            onClick={async () => {
+              setSyncing(true);
+              const ok = await syncTickets({ all: true });
+              setSyncing(false);
+              toast(ok ? "تمت مزامنة كل التذاكر مع المخزون" : "تعذّرت المزامنة — حاول لاحقاً", ok ? "success" : "error");
+            }}
+            className="w-full rounded-lg border border-slate-300 bg-white py-2.5 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-60"
+          >
+            {syncing ? "جارٍ المزامنة…" : "مزامنة كل التذاكر مع المخزون"}
+          </button>
+          <p className="mt-1.5 text-center text-xs text-slate-400">
+            تحدث المزامنة تلقائياً مع كل تعديل؛ استعمل هذا الزر إن لم تظهر تذكرة في صفحة الصيانة عند المخزون.
+          </p>
         </section>
       )}
     </AppShell>
