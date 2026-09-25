@@ -40,6 +40,8 @@ export default function NewTicket() {
   const [branchId, setBranchId] = useState("");
   const [inventoryDown, setInventoryDown] = useState(false);
   const [promisedAt, setPromisedAt] = useState("");
+  // مدة الإنجاز المعتادة من الإعدادات — تُعرض كاختيار سريع فقط، لا تُملأ تلقائياً.
+  const [turnaroundDays, setTurnaroundDays] = useState(3);
 
   const [phone, setPhone] = useState("");
   const [customerName, setCustomerName] = useState("");
@@ -71,7 +73,10 @@ export default function NewTicket() {
       const allowed = staff?.role === "admin" ? (rows ?? []) : (rows ?? []).filter((b) => b.id === staff?.branch_id);
       setBranches(allowed);
       setBranchId(staff?.branch_id ?? allowed[0]?.id ?? "");
-      setPromisedAt(defaultPromisedAt(Number(settings.default_turnaround_days) || 3));
+      // موعد التسليم لا يُملأ تلقائياً: كان يُكتب "بعد 3 أيام" في كل إيصال حتى حين لم يتفق
+      // الموظف مع الزبون على موعد، فيعود الزبون في يوم لم يَعِده به أحد. الموظف يختاره
+      // بنفسه، وإن تركه فارغاً لا يُطبع في الإيصال أصلاً.
+      setTurnaroundDays(Number(settings.default_turnaround_days) || 3);
       setInventoryDown(health === "down");
     })();
   }, [staff]);
@@ -169,7 +174,7 @@ export default function NewTicket() {
   const promisedLabel = promisedAt
     ? new Intl.DateTimeFormat("ar", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })
         .format(new Date(promisedAt))
-    : "—";
+    : "بدون موعد";
 
   return (
     <AppShell inventoryDown={inventoryDown}>
@@ -377,7 +382,7 @@ export default function NewTicket() {
                   />
                 </div>
                 <div>
-                  <label className="label" htmlFor="promised">موعد التسليم</label>
+                  <label className="label" htmlFor="promised">موعد التسليم (اختياري)</label>
                   <input
                     id="promised"
                     type="datetime-local"
@@ -385,6 +390,28 @@ export default function NewTicket() {
                     value={promisedAt}
                     onChange={(e) => setPromisedAt(e.target.value)}
                   />
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {[
+                      { days: 1, label: "غداً" },
+                      ...(turnaroundDays !== 1 && turnaroundDays !== 7 ? [{ days: turnaroundDays, label: `بعد ${turnaroundDays} أيام` }] : []),
+                      { days: 7, label: "بعد أسبوع" },
+                    ].map((o) => (
+                      <button
+                        key={o.days}
+                        type="button"
+                        className="btn-ghost h-9 px-3 text-sm"
+                        onClick={() => setPromisedAt(defaultPromisedAt(o.days))}
+                      >
+                        {o.label}
+                      </button>
+                    ))}
+                    {promisedAt && (
+                      <button type="button" className="btn-ghost h-9 px-3 text-sm text-slate-500" onClick={() => setPromisedAt("")}>
+                        بدون موعد
+                      </button>
+                    )}
+                  </div>
+                  <p className="mt-1 text-xs text-slate-500">اتركه فارغاً إن لم تتفق مع الزبون على موعد — لن يُطبع في الإيصال.</p>
                 </div>
                 {branches.length > 1 && (
                   <div>
