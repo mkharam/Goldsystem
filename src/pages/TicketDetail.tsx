@@ -35,6 +35,7 @@ export default function TicketDetail() {
   const [weightOut, setWeightOut] = useState("");
   const [workDone, setWorkDone] = useState("");
   const [finalCost, setFinalCost] = useState("");
+  const [weightAfter, setWeightAfter] = useState("");
   const [note, setNote] = useState("");
   const [deliveredTo, setDeliveredTo] = useState("");
   const [varianceNote, setVarianceNote] = useState("");
@@ -89,16 +90,28 @@ export default function TicketDetail() {
   const days = daysFromNow(ticket.promised_at);
   const isOverdue = isOpen && days !== null && days < 0;
 
+  // مرجع فحص التسليم: الوزن بعد الصيانة إن سُجّل، وإلا وزن الاستلام.
+  const weightRef = ticket.weight_after_repair_grams ?? ticket.weight_in_grams;
+  const refLabel = ticket.weight_after_repair_grams !== null ? "وزنها بعد الصيانة" : "وزن الاستلام";
+  // تغيّر الوزن بسبب الصيانة (استلام ← جاهزية) — معلومة لا تحذير.
+  const repairChange =
+    ticket.weight_in_grams !== null && ticket.weight_after_repair_grams !== null
+      ? Number((ticket.weight_after_repair_grams - ticket.weight_in_grams).toFixed(3))
+      : null;
   const variance =
-    ticket.weight_in_grams !== null && ticket.weight_out_grams !== null
-      ? Number((ticket.weight_out_grams - ticket.weight_in_grams).toFixed(3))
+    weightRef !== null && ticket.weight_out_grams !== null
+      ? Number((ticket.weight_out_grams - weightRef).toFixed(3))
+      : null;
+  const liveRepairChange =
+    ticket.weight_in_grams !== null && weightAfter.trim() && Number.isFinite(Number(weightAfter))
+      ? Number((Number(weightAfter) - ticket.weight_in_grams).toFixed(3))
       : null;
 
   // فرق الوزن يُحسب أثناء الكتابة ليراه الموظف قبل الإرسال؛ القرار النهائي في
   // transitionTicket، وهذا عرض مساعد لا تحقّق.
   const liveCheck =
-    ticket.weight_in_grams !== null && weightOut.trim() && Number.isFinite(Number(weightOut))
-      ? checkWeight(ticket.weight_in_grams, Number(weightOut), tolerance)
+    weightRef !== null && weightOut.trim() && Number.isFinite(Number(weightOut))
+      ? checkWeight(weightRef, Number(weightOut), tolerance)
       : null;
 
   const track = trackingUrl(ticket.tracking_token);
@@ -120,6 +133,7 @@ export default function TicketDetail() {
       workDone: target === "ready" ? workDone.trim() || null : undefined,
       finalCost: (target === "ready" || target === "delivered") && finalCost.trim() ? Number(normalizeDigits(finalCost)) : undefined,
       weightOut: target === "delivered" && weightOut.trim() ? Number(normalizeDigits(weightOut)) : undefined,
+      weightAfter: target === "ready" && weightAfter.trim() ? Number(normalizeDigits(weightAfter)) : undefined,
       deliveredToName: deliveredTo.trim() || null,
       varianceNote: varianceNote.trim() || null,
       acceptVariance,
@@ -132,7 +146,7 @@ export default function TicketDetail() {
     }
 
     setTarget(null);
-    setWeightOut(""); setWorkDone(""); setFinalCost(""); setNote(""); setVarianceNote(""); setAcceptVariance(false);
+    setWeightOut(""); setWeightAfter(""); setWorkDone(""); setFinalCost(""); setNote(""); setVarianceNote(""); setAcceptVariance(false);
     await reload();
     setBusy(false);
     buzz();
@@ -246,6 +260,19 @@ export default function TicketDetail() {
                       <textarea id="work_done" rows={2} className="field" value={workDone} onChange={(e) => setWorkDone(e.target.value)} />
                     </div>
                     <div>
+                      {ticket.weight_in_grams !== null && (
+                        <div className="mb-3">
+                          <label className="label" htmlFor="weight_after">الوزن بعد الصيانة (غرام) <span className="text-red-600">*</span></label>
+                          <input id="weight_after" type="text" inputMode="decimal" dir="ltr" className="field text-left"
+                            placeholder="0.000" value={weightAfter} onChange={(e) => setWeightAfter(normalizeDigits(e.target.value))} />
+                          <p className="mt-1 text-xs text-slate-500">
+                            وزن الاستلام {ticket.weight_in_grams.toFixed(3)} غ
+                            {liveRepairChange !== null && (
+                              <> — التغيّر بسبب الصيانة: <span className="font-semibold text-brand-800" dir="ltr">{liveRepairChange > 0 ? "+" : ""}{liveRepairChange.toFixed(3)} غ</span></>
+                            )}
+                          </p>
+                        </div>
+                      )}
                       <label className="label" htmlFor="final_cost">السعر الحقيقي <span className="text-red-600">*</span></label>
                       <input id="final_cost" type="text" inputMode="decimal" dir="ltr" className="field text-left text-lg font-bold"
                         placeholder="0" value={finalCost} onChange={(e) => setFinalCost(normalizeDigits(e.target.value))} />
@@ -273,7 +300,7 @@ export default function TicketDetail() {
                         <input id="weight_out" type="text" inputMode="decimal" dir="ltr" className="field text-left"
                           placeholder="0.000" value={weightOut} onChange={(e) => setWeightOut(normalizeDigits(e.target.value))} />
                         <p className="mt-1 text-xs text-slate-500">
-                          وزن الاستلام كان {ticket.weight_in_grams.toFixed(3)} غ — المسموح ±{tolerance} غ
+                          {refLabel} {weightRef?.toFixed(3)} غ — المسموح ±{tolerance} غ
                         </p>
 
                         {liveCheck && (
@@ -323,7 +350,9 @@ export default function TicketDetail() {
                 {actionError && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{actionError}</p>}
 
                 <button type="button" onClick={onTransition} className="btn-success w-full py-3"
-                  disabled={busy || ((target === "delivered" || target === "ready") && !finalCost.trim())}>
+                  disabled={busy
+                    || ((target === "delivered" || target === "ready") && !finalCost.trim())
+                    || (target === "ready" && ticket.weight_in_grams !== null && !weightAfter.trim())}>
                   {busy && <span className="spinner" />}
                   {busy ? "جارٍ الحفظ…" : target === "delivered" ? "تأكيد التسليم" : `تغيير إلى ${REPAIR_STATUS[target].label}`}
                 </button>
@@ -374,6 +403,12 @@ export default function TicketDetail() {
           {ticket.item_type && <Row label="النوع" value={ticket.item_type} />}
           {ticket.karat && <Row label="العيار" value={ticket.karat} />}
           <Row label="الوزن عند الاستلام" value={formatWeight(ticket.weight_in_grams)} />
+          {ticket.weight_after_repair_grams !== null && (
+            <Row
+              label="الوزن بعد الصيانة"
+              value={`${formatWeight(ticket.weight_after_repair_grams)}${repairChange ? ` (${repairChange > 0 ? "+" : ""}${repairChange.toFixed(3)} غ بسبب الصيانة)` : ""}`}
+            />
+          )}
           {ticket.weight_out_grams !== null && <Row label="الوزن عند التسليم" value={formatWeight(ticket.weight_out_grams)} />}
           <Row label="المصدر" value={ticket.item_source === "inventory" ? "من المخزون" : "إدخال يدوي"} />
         </dl>
@@ -382,7 +417,7 @@ export default function TicketDetail() {
           <div className={`mt-3 rounded-lg px-3 py-2 text-sm ${
             Math.abs(variance) <= tolerance ? "bg-brand-50 text-brand-800" : "bg-red-50 text-red-700"
           }`}>
-            فرق الوزن: {variance > 0 ? "+" : ""}{variance.toFixed(3)} غ (المسموح ±{tolerance} غ)
+            فرق التسليم عن {refLabel}: {variance > 0 ? "+" : ""}{variance.toFixed(3)} غ (المسموح ±{tolerance} غ)
             {ticket.weight_variance_note && (
               <span className="mt-1 block text-xs opacity-80">{ticket.weight_variance_note}</span>
             )}
