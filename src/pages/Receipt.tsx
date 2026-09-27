@@ -59,7 +59,7 @@ export default function Receipt() {
             {ticket.karat && <Row label="العيار" value={ticket.karat} />}
             {ticket.weight_in_grams !== null && <Row label="الوزن" value={formatWeight(ticket.weight_in_grams)} />}
             <Row label="العطل" value={ticket.problem_description} />
-            {ticket.estimated_cost !== null && <Row label="التكلفة التقديرية" value={formatMoney(ticket.estimated_cost)} />}
+            {ticket.estimated_cost !== null && <Row label="السعر التقريبي" value={formatMoney(ticket.estimated_cost)} />}
             {ticket.promised_at && <Row label="موعد التسليم" value={formatDateTime(ticket.promised_at)} />}
             {ticket.branch?.name && <Row label="الفرع" value={ticket.branch.name} />}
             {ticket.branch?.phone && <Row label="هاتف الفرع" value={ticket.branch.phone} ltr />}

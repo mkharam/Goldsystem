@@ -348,7 +348,7 @@ export default function NewTicket() {
             {/* السعر — الحقل الأساسي */}
             <div className="overflow-hidden rounded-2xl border border-gold-300/70 bg-gradient-to-b from-gold-50 to-white shadow-sm">
               <div className="flex items-center justify-between px-4 pt-3">
-                <label htmlFor="cost" className="text-sm font-bold text-brand-800">سعر الصيانة</label>
+                <label htmlFor="cost" className="text-sm font-bold text-brand-800">السعر التقريبي</label>
                 <button
                   type="button"
                   onClick={() => { setPriceLater((v) => !v); setEstimatedCost(""); }}
@@ -361,7 +361,7 @@ export default function NewTicket() {
               </div>
               {priceLater ? (
                 <p className="px-4 pb-4 pt-3 text-sm text-slate-600">
-                  يُحدَّد بعد فحص القطعة — وسيُطلب إلزامياً قبل تسليمها للزبون.
+                  يُحدَّد بعد فحص القطعة — السعر الحقيقي يُضاف إلزامياً عند استلامها جاهزة.
                 </p>
               ) : (
                 <div className="flex items-baseline justify-center gap-2 px-4 pb-4 pt-2">
@@ -377,6 +377,11 @@ export default function NewTicket() {
                   />
                   <span className="text-lg font-bold text-gold-700">د.ل</span>
                 </div>
+              )}
+              {!priceLater && (
+                <p className="px-4 pb-3 -mt-1 text-center text-xs text-slate-500">
+                  تقريبي للزبون — السعر الحقيقي يُضاف عند استلام القطعة جاهزة.
+                </p>
               )}
             </div>
 
@@ -434,7 +439,7 @@ export default function NewTicket() {
               <dl className="space-y-1 text-slate-600">
                 <Line label="الزبون" value={`${customerName || "—"} · ${phone || "—"}`} />
                 <Line label="القطعة" value={[itemName || "—", karat, weight ? `${weight} غ` : ""].filter(Boolean).join(" · ")} />
-                <Line label="السعر" value={estimatedCost ? `${estimatedCost} د.ل` : "لاحقاً — قبل التسليم"} />
+                <Line label="السعر التقريبي" value={estimatedCost ? `${estimatedCost} د.ل` : "لاحقاً — عند الاستلام جاهزة"} />
                 <Line label="التسليم" value={promisedLabel} />
                 <Line label="الفرع" value={branchName ?? "—"} />
               </dl>

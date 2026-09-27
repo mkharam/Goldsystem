@@ -230,7 +230,11 @@ export async function transitionTicket(input: TransitionInput): Promise<Transiti
   if (input.workDone !== undefined) update.work_done = input.workDone;
   if (input.finalCost !== undefined) update.final_cost = input.finalCost;
 
-  // السعر إلزامي قبل التسليم (نفس الحارس في قاعدة البيانات: require_price_on_delivery).
+  // السعر الحقيقي إلزامي حين تعود القطعة جاهزة، وأي سعر إلزامي قبل التسليم
+  // (نفس الحارس في قاعدة البيانات: require_price_on_delivery).
+  if (input.to === "ready" && (input.finalCost ?? ticket.final_cost) == null) {
+    return { ok: false, error: "أدخل السعر الحقيقي عند استلام القطعة جاهزة" };
+  }
   if (input.to === "delivered" && (input.finalCost ?? ticket.final_cost ?? ticket.estimated_cost) == null) {
     return { ok: false, error: "أدخل سعر الصيانة قبل تسليم القطعة للزبون" };
   }
