@@ -69,6 +69,14 @@ export default function TicketDetail() {
 
   useEffect(() => { void reload(); }, [reload]);
 
+  // السعر يُحمل من خطوة لأخرى: ما كُتب عند الاستلام يظهر عند إنهاء العمل، والنهائي (أو
+  // التقديري) يظهر عند التسليم — لا يُعاد كتابته، ويُعدَّل فقط إن تغيّر.
+  useEffect(() => {
+    if (target !== "ready" && target !== "delivered") return;
+    const known = ticket?.final_cost ?? ticket?.estimated_cost;
+    setFinalCost(known != null ? String(known) : "");
+  }, [target, ticket?.final_cost, ticket?.estimated_cost]);
+
   if (loading) return <AppShell><p className="text-center text-slate-400">جارٍ التحميل…</p></AppShell>;
   if (!ticket) return <AppShell><p className="card p-6 text-center text-slate-500">التذكرة غير موجودة</p></AppShell>;
 
@@ -106,7 +114,7 @@ export default function TicketDetail() {
       tolerance,
       note: note.trim() || null,
       workDone: target === "ready" ? workDone.trim() || null : undefined,
-      finalCost: target === "ready" && finalCost.trim() ? Number(normalizeDigits(finalCost)) : undefined,
+      finalCost: (target === "ready" || target === "delivered") && finalCost.trim() ? Number(normalizeDigits(finalCost)) : undefined,
       weightOut: target === "delivered" && weightOut.trim() ? Number(normalizeDigits(weightOut)) : undefined,
       deliveredToName: deliveredTo.trim() || null,
       varianceNote: varianceNote.trim() || null,
@@ -234,9 +242,12 @@ export default function TicketDetail() {
                       <textarea id="work_done" rows={2} className="field" value={workDone} onChange={(e) => setWorkDone(e.target.value)} />
                     </div>
                     <div>
-                      <label className="label" htmlFor="final_cost">التكلفة النهائية</label>
+                      <label className="label" htmlFor="final_cost">سعر الصيانة</label>
                       <input id="final_cost" type="text" inputMode="decimal" dir="ltr" className="field text-left"
                         value={finalCost} onChange={(e) => setFinalCost(normalizeDigits(e.target.value))} />
+                      {!finalCost.trim() && (
+                        <p className="mt-1 text-xs text-slate-500">إن لم يُحدَّد بعد، سيُطلب عند التسليم.</p>
+                      )}
                     </div>
                   </>
                 )}
@@ -276,6 +287,15 @@ export default function TicketDetail() {
                     )}
 
                     <div>
+                      <label className="label" htmlFor="delivery_price">سعر الصيانة <span className="text-red-600">*</span></label>
+                      <input id="delivery_price" type="text" inputMode="decimal" dir="ltr" className="field text-left"
+                        placeholder="0" value={finalCost} onChange={(e) => setFinalCost(normalizeDigits(e.target.value))} />
+                      {!finalCost.trim() && (
+                        <p className="mt-1 text-xs text-red-700">مطلوب — لا يمكن تسليم القطعة بلا سعر.</p>
+                      )}
+                    </div>
+
+                    <div>
                       <label className="label" htmlFor="delivered_to">سُلّمت إلى</label>
                       <input id="delivered_to" className="field" value={deliveredTo} onChange={(e) => setDeliveredTo(e.target.value)} />
                     </div>
@@ -289,7 +309,8 @@ export default function TicketDetail() {
 
                 {actionError && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{actionError}</p>}
 
-                <button type="button" onClick={onTransition} className="btn-success w-full py-3" disabled={busy}>
+                <button type="button" onClick={onTransition} className="btn-success w-full py-3"
+                  disabled={busy || (target === "delivered" && !finalCost.trim())}>
                   {busy && <span className="spinner" />}
                   {busy ? "جارٍ الحفظ…" : target === "delivered" ? "تأكيد التسليم" : `تغيير إلى ${REPAIR_STATUS[target].label}`}
                 </button>

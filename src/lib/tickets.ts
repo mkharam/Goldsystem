@@ -230,6 +230,11 @@ export async function transitionTicket(input: TransitionInput): Promise<Transiti
   if (input.workDone !== undefined) update.work_done = input.workDone;
   if (input.finalCost !== undefined) update.final_cost = input.finalCost;
 
+  // السعر إلزامي قبل التسليم (نفس الحارس في قاعدة البيانات: require_price_on_delivery).
+  if (input.to === "delivered" && (input.finalCost ?? ticket.final_cost ?? ticket.estimated_cost) == null) {
+    return { ok: false, error: "أدخل سعر الصيانة قبل تسليم القطعة للزبون" };
+  }
+
   if (input.to === "delivered") {
     // التسليم هو اللحظة التي يجب أن تُوزن فيها القطعة؛ لا تجاوز لفرق الوزن إلا
     // بقرار صريح من الموظف مع سبب مكتوب.
