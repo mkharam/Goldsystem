@@ -211,6 +211,8 @@ export type TransitionInput = {
   workDone?: string | null;
   finalCost?: number | null;
   weightOut?: number | null;
+  /** وزن القطعة حين تعود جاهزة من الصيانة. */
+  weightAfter?: number | null;
   deliveredToName?: string | null;
   varianceNote?: string | null;
   acceptVariance?: boolean;
@@ -235,19 +237,30 @@ export async function transitionTicket(input: TransitionInput): Promise<Transiti
   if (input.to === "ready" && (input.finalCost ?? ticket.final_cost) == null) {
     return { ok: false, error: "أدخل السعر الحقيقي عند استلام القطعة جاهزة" };
   }
+  // حين تعود القطعة جاهزة توزن من جديد: فرقها عن وزن الاستلام طبيعي (إضافة ذهب، لحام،
+  // تصغير مقاس…) ويُسجَّل كما هو، ويصبح هذا الوزن مرجع فحص التسليم.
+  if (input.to === "ready" && ticket.weight_in_grams !== null && (input.weightAfter === null || input.weightAfter === undefined)) {
+    return { ok: false, error: "أدخل وزن القطعة بعد الصيانة" };
+  }
+  if (input.to === "ready" && input.weightAfter !== null && input.weightAfter !== undefined) {
+    update.weight_after_repair_grams = input.weightAfter;
+  }
+
   if (input.to === "delivered" && (input.finalCost ?? ticket.final_cost ?? ticket.estimated_cost) == null) {
     return { ok: false, error: "أدخل سعر الصيانة قبل تسليم القطعة للزبون" };
   }
 
   if (input.to === "delivered") {
     // التسليم هو اللحظة التي يجب أن تُوزن فيها القطعة؛ لا تجاوز لفرق الوزن إلا
-    // بقرار صريح من الموظف مع سبب مكتوب.
-    if (ticket.weight_in_grams !== null) {
+    // بقرار صريح من الموظف مع سبب مكتوب. المرجع وزنها بعد الصيانة (لا وزن الاستلام)،
+    // وتذاكر جُهّزت قبل تسجيله تبقى على وزن الاستلام.
+    const weightRef = ticket.weight_after_repair_grams ?? ticket.weight_in_grams;
+    if (weightRef !== null) {
       if (input.weightOut === null || input.weightOut === undefined) {
         return { ok: false, error: "أدخل وزن القطعة عند التسليم" };
       }
 
-      const check = checkWeight(ticket.weight_in_grams, input.weightOut, input.tolerance);
+      const check = checkWeight(weightRef, input.weightOut, input.tolerance);
       if (!check.withinTolerance && !input.acceptVariance) {
         return { ok: false, error: "فرق الوزن يتجاوز المسموح", weightCheck: check };
       }

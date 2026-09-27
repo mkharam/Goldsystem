@@ -45,6 +45,8 @@ export type RepairTicket = {
   karat: string | null;
   weight_in_grams: number | null;
   weight_out_grams: number | null;
+  /** الوزن حين تعود القطعة جاهزة — مرجع فحص التسليم (الفرق عن الاستلام طبيعي حسب الصيانة). */
+  weight_after_repair_grams: number | null;
   weight_checked_at: string | null;
   weight_variance_accepted_by: string | null;
   weight_variance_note: string | null;
