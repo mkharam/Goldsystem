@@ -369,7 +369,7 @@ export default function NewTicket() {
                   </select>
                 </div>
                 <div>
-                  <label className="label" htmlFor="cost">التكلفة التقديرية</label>
+                  <label className="label" htmlFor="cost">سعر الصيانة</label>
                   <input
                     id="cost"
                     type="text"
@@ -380,6 +380,7 @@ export default function NewTicket() {
                     value={estimatedCost}
                     onChange={(e) => setEstimatedCost(normalizeDigits(e.target.value))}
                   />
+                  <p className="mt-1 text-xs text-slate-500">إن لم تعرف السعر الآن اتركه — سيُطلب إلزامياً قبل تسليم القطعة للزبون.</p>
                 </div>
                 <div>
                   <label className="label" htmlFor="promised">موعد التسليم (اختياري)</label>
