@@ -61,6 +61,9 @@ export default function NewTicket() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [showMore, setShowMore] = useState(false);
+  // "السعر لاحقاً": الموظف لا يعرف التكلفة بعد — يُطلب إلزامياً عند التسليم (require_price_on_delivery).
+  const [priceLater, setPriceLater] = useState(false);
+  const [showDatePicker, setShowDatePicker] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -324,10 +327,13 @@ export default function NewTicket() {
         )}
 
         {/* ——— ٣ العطل ——— */}
+        {/* الخطوة الأخيرة: المطلوب، ثم السعر بطاقةً رئيسية بارزة (يراه الزبون ويتفق عليه قبل أن
+            يترك قطعته)، ثم موعد التسليم خياراً خفيفاً بضغطة. الفرع والنوع — نادراً ما يتغيّران —
+            في "المزيد". */}
         {step === 2 && (
-          <div className="space-y-4">
+          <div className="space-y-5">
             <div>
-              <label className="label text-base" htmlFor="problem">ما المطلوب عملـه؟</label>
+              <label className="label text-base" htmlFor="problem">ما المطلوب عمله؟</label>
               <textarea
                 id="problem"
                 rows={3}
@@ -339,24 +345,107 @@ export default function NewTicket() {
               />
             </div>
 
+            {/* السعر — الحقل الأساسي */}
+            <div className="overflow-hidden rounded-2xl border border-gold-300/70 bg-gradient-to-b from-gold-50 to-white shadow-sm">
+              <div className="flex items-center justify-between px-4 pt-3">
+                <label htmlFor="cost" className="text-sm font-bold text-brand-800">سعر الصيانة</label>
+                <button
+                  type="button"
+                  onClick={() => { setPriceLater((v) => !v); setEstimatedCost(""); }}
+                  className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
+                    priceLater ? "border-brand-600 bg-brand-600 text-white" : "border-slate-300 bg-white text-slate-600"
+                  }`}
+                >
+                  {priceLater ? "✓ السعر لاحقاً" : "السعر لاحقاً"}
+                </button>
+              </div>
+              {priceLater ? (
+                <p className="px-4 pb-4 pt-3 text-sm text-slate-600">
+                  يُحدَّد بعد فحص القطعة — وسيُطلب إلزامياً قبل تسليمها للزبون.
+                </p>
+              ) : (
+                <div className="flex items-baseline justify-center gap-2 px-4 pb-4 pt-2">
+                  <input
+                    id="cost"
+                    type="text"
+                    inputMode="decimal"
+                    dir="ltr"
+                    className="w-40 border-0 border-b-2 border-gold-400 bg-transparent py-1 text-center text-4xl font-extrabold text-brand-900 outline-none placeholder:text-slate-300 focus:border-brand-600"
+                    placeholder="0"
+                    value={estimatedCost}
+                    onChange={(e) => setEstimatedCost(normalizeDigits(e.target.value))}
+                  />
+                  <span className="text-lg font-bold text-gold-700">د.ل</span>
+                </div>
+              )}
+            </div>
+
+            {/* موعد التسليم — اختياري وخفيف */}
+            <div>
+              <p className="label">
+                موعد التسليم <span className="font-normal text-slate-400">(اختياري)</span>
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {[
+                  { days: 0, label: "بدون موعد" },
+                  { days: 1, label: "غداً" },
+                  ...(turnaroundDays !== 1 && turnaroundDays !== 7 ? [{ days: turnaroundDays, label: `بعد ${turnaroundDays} أيام` }] : []),
+                  { days: 7, label: "بعد أسبوع" },
+                ].map((o) => {
+                  const value = o.days === 0 ? "" : defaultPromisedAt(o.days);
+                  const active = !showDatePicker && promisedAt === value;
+                  return (
+                    <button
+                      key={o.days}
+                      type="button"
+                      onClick={() => { setShowDatePicker(false); setPromisedAt(value); }}
+                      className={`h-9 rounded-full border px-3.5 text-sm font-medium transition ${
+                        active ? "border-brand-600 bg-brand-600 text-white" : "border-slate-300 bg-white text-slate-700"
+                      }`}
+                    >
+                      {o.label}
+                    </button>
+                  );
+                })}
+                <button
+                  type="button"
+                  onClick={() => setShowDatePicker(true)}
+                  className={`h-9 rounded-full border px-3.5 text-sm font-medium transition ${
+                    showDatePicker ? "border-brand-600 bg-brand-600 text-white" : "border-slate-300 bg-white text-slate-700"
+                  }`}
+                >
+                  تاريخ آخر…
+                </button>
+              </div>
+              {showDatePicker && (
+                <input
+                  id="promised"
+                  type="datetime-local"
+                  className="field mt-2"
+                  value={promisedAt}
+                  onChange={(e) => setPromisedAt(e.target.value)}
+                />
+              )}
+            </div>
+
             {/* مراجعة سريعة قبل الحفظ: يرى ما سيُطبع على الإيصال. */}
-            <div className="rounded-lg bg-slate-50 p-3 text-sm">
+            <div className="rounded-xl bg-slate-50 p-3 text-sm">
               <p className="mb-2 font-semibold text-slate-700">مراجعة</p>
               <dl className="space-y-1 text-slate-600">
                 <Line label="الزبون" value={`${customerName || "—"} · ${phone || "—"}`} />
                 <Line label="القطعة" value={[itemName || "—", karat, weight ? `${weight} غ` : ""].filter(Boolean).join(" · ")} />
-                <Line label="الفرع" value={branchName ?? "—"} />
+                <Line label="السعر" value={estimatedCost ? `${estimatedCost} د.ل` : "لاحقاً — قبل التسليم"} />
                 <Line label="التسليم" value={promisedLabel} />
-                {estimatedCost && <Line label="التكلفة" value={estimatedCost} />}
+                <Line label="الفرع" value={branchName ?? "—"} />
               </dl>
             </div>
 
             <button
               type="button"
               onClick={() => setShowMore((v) => !v)}
-              className="w-full rounded-lg border border-dashed border-slate-300 py-2.5 text-sm text-slate-500"
+              className="w-full py-1 text-sm text-slate-500 underline-offset-4 hover:underline"
             >
-              {showMore ? "إخفاء" : "تعديل الفرع أو الموعد أو التكلفة"}
+              {showMore ? "إخفاء" : "تعديل نوع القطعة أو الفرع"}
             </button>
 
             {showMore && (
@@ -367,52 +456,6 @@ export default function NewTicket() {
                     <option value="">—</option>
                     {ITEM_TYPE_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
                   </select>
-                </div>
-                <div>
-                  <label className="label" htmlFor="cost">سعر الصيانة</label>
-                  <input
-                    id="cost"
-                    type="text"
-                    inputMode="decimal"
-                    dir="ltr"
-                    className="field text-left"
-                    placeholder="0"
-                    value={estimatedCost}
-                    onChange={(e) => setEstimatedCost(normalizeDigits(e.target.value))}
-                  />
-                  <p className="mt-1 text-xs text-slate-500">إن لم تعرف السعر الآن اتركه — سيُطلب إلزامياً قبل تسليم القطعة للزبون.</p>
-                </div>
-                <div>
-                  <label className="label" htmlFor="promised">موعد التسليم (اختياري)</label>
-                  <input
-                    id="promised"
-                    type="datetime-local"
-                    className="field"
-                    value={promisedAt}
-                    onChange={(e) => setPromisedAt(e.target.value)}
-                  />
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {[
-                      { days: 1, label: "غداً" },
-                      ...(turnaroundDays !== 1 && turnaroundDays !== 7 ? [{ days: turnaroundDays, label: `بعد ${turnaroundDays} أيام` }] : []),
-                      { days: 7, label: "بعد أسبوع" },
-                    ].map((o) => (
-                      <button
-                        key={o.days}
-                        type="button"
-                        className="btn-ghost h-9 px-3 text-sm"
-                        onClick={() => setPromisedAt(defaultPromisedAt(o.days))}
-                      >
-                        {o.label}
-                      </button>
-                    ))}
-                    {promisedAt && (
-                      <button type="button" className="btn-ghost h-9 px-3 text-sm text-slate-500" onClick={() => setPromisedAt("")}>
-                        بدون موعد
-                      </button>
-                    )}
-                  </div>
-                  <p className="mt-1 text-xs text-slate-500">اتركه فارغاً إن لم تتفق مع الزبون على موعد — لن يُطبع في الإيصال.</p>
                 </div>
                 {branches.length > 1 && (
                   <div>
