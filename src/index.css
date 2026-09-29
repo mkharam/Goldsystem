@@ -173,12 +173,13 @@
     break-inside: avoid;
   }
 
-  /* ورقة A5 يختارها المتصفح تلقائياً (كروم/إيدج). سفاري آيفون يفرض هوامشه الخاصة
-     (~12.7 مم) — لذلك الإيصال نفسه 118×175 مم، أصغر من المساحة المطبوعة في الحالتين،
-     فلا يحتاج أي متصفح لتصغيره أو تكبيره. */
+  /* الإيصال يملأ عرض الورقة أياً كان مقاسها (A5 أو A4 من آيفون أو لابتوب): كل مقاساته
+     نسبية لعرضه (var(--u) أدناه)، فيكبر ويصغر كقطعة واحدة كصورة. كروم يختار A5 تلقائياً.
+     هامش الصفحة صفر: المتصفح (سفاري آيفون وكروم) يطبع الرابط والتاريخ ورقم الصفحة داخل
+     الهامش، فبلا هامش لا مكان لها. الحاشية البيضاء نصنعها نحن داخل الصفحة (‎.a5-wrap‎). */
   @page {
     size: A5 portrait;
-    margin: 10mm;
+    margin: 0;
   }
 
   html,
@@ -188,59 +189,82 @@
     background: #fff !important;
   }
 
-  .a5-sheet {
-    zoom: 1 !important;
+  .a5-wrap {
+    width: 90% !important;
+    max-width: 180mm !important;
     margin: 0 auto !important;
+    padding-top: 5% ;
+  }
+
+  .a5-sheet {
     box-shadow: none !important;
-    border: 0 !important;
     break-inside: avoid;
     page-break-after: avoid;
   }
+
+  /* التدرّجات اللونية تُطبع مشوّهة في سفاري آيفون (دائرة ذهبية كبيرة) — ألوان صريحة. */
+  .a5-band,
+  .a5-foot {
+    background: theme("colors.brand.900") !important;
+  }
+  .a5-price {
+    background: theme("colors.gold.50") !important;
+  }
 }
 
-/* ============ إيصال A5 فاخر — كل المقاسات بالمليمتر/النقطة حتى يُطبع بحجمه الحقيقي ============ */
+/* الحاوية تحدد عرض الإيصال؛ ‎--u‎ = مليمتر واحد من التصميم الأصلي (عرضه 118 مم)، وكل
+   مقاس داخلي مضروب فيه — فالإيصال يتناسب كاملاً مع أي عرض: الشاشة أو A5 أو A4. */
+.a5-wrap {
+  container-type: inline-size;
+  width: min(118mm, calc(100vw - 24px));
+  margin: 0 auto;
+}
+
+.a5-sheet {
+  --u: calc(100cqw / 118);
+}
+
+/* ============ إيصال A5 فاخر — المقاسات بوحدة ‎--u‎ (مليمتر التصميم) فيتناسب مع عرض الورقة ============ */
 .a5-sheet {
   position: relative;
-  width: 118mm;
-  max-height: 175mm;
+  width: 100%;
+  max-height: calc(163 * var(--u));
   overflow: hidden;
   box-sizing: border-box;
   margin: 0 auto;
   background: #fffdf8;
   color: theme("colors.brand.950");
-  font-size: 9pt;
+  font-size: calc(3.18 * var(--u));
   line-height: 1.35;
   display: flex;
   flex-direction: column;
-  border: 0.7mm solid theme("colors.gold.600");
-  border-radius: 2.5mm;
+  border: calc(0.7 * var(--u)) solid theme("colors.gold.600");
+  border-radius: calc(2.5 * var(--u));
   box-shadow: 0 10px 30px rgb(6 21 15 / 0.18);
-  /* معاينة الشاشة: نفس الورقة مصغّرة لتناسب الهاتف (الطباعة تعيدها 1). */
-  zoom: var(--fit, 1);
 }
 
 /* إطار داخلي رفيع — الإطار المزدوج هو ما يعطي الإيصال طابع الشهادة الفاخرة. */
 .a5-sheet::before {
   content: "";
   position: absolute;
-  inset: 1.3mm;
-  border: 0.25mm solid theme("colors.gold.400");
-  border-radius: 1.6mm;
+  inset: calc(1.3 * var(--u));
+  border: calc(0.25 * var(--u)) solid theme("colors.gold.400");
+  border-radius: calc(1.6 * var(--u));
   pointer-events: none;
   z-index: 2;
 }
 
 .a5-corner {
   position: absolute;
-  width: 7mm;
-  height: 7mm;
+  width: calc(7 * var(--u));
+  height: calc(7 * var(--u));
   color: theme("colors.gold.500");
   z-index: 3;
 }
-.a5-corner.tr { top: 0.4mm; right: 0.4mm; }
-.a5-corner.tl { top: 0.4mm; left: 0.4mm; transform: scaleX(-1); }
-.a5-corner.br { bottom: 0.4mm; right: 0.4mm; transform: scaleY(-1); }
-.a5-corner.bl { bottom: 0.4mm; left: 0.4mm; transform: scale(-1, -1); }
+.a5-corner.tr { top: calc(0.4 * var(--u)); right: calc(0.4 * var(--u)); }
+.a5-corner.tl { top: calc(0.4 * var(--u)); left: calc(0.4 * var(--u)); transform: scaleX(-1); }
+.a5-corner.br { bottom: calc(0.4 * var(--u)); right: calc(0.4 * var(--u)); transform: scaleY(-1); }
+.a5-corner.bl { bottom: calc(0.4 * var(--u)); left: calc(0.4 * var(--u)); transform: scale(-1, -1); }
 
 .a5-band {
   position: relative;
@@ -249,19 +273,19 @@
     linear-gradient(180deg, theme("colors.brand.800"), theme("colors.brand.950"));
   color: theme("colors.gold.200");
   text-align: center;
-  padding: 5mm 6mm 8mm;
+  padding: calc(4 * var(--u)) calc(6 * var(--u)) calc(7 * var(--u));
 }
 
 .a5-band .a5-logo {
-  width: 15mm !important;
-  height: 15mm !important;
-  margin: 0 auto 1.5mm;
-  box-shadow: 0 0 0 0.5mm theme("colors.gold.500"), 0 0 0 1.1mm rgb(201 162 74 / 0.25);
+  width: calc(13 * var(--u)) !important;
+  height: calc(13 * var(--u)) !important;
+  margin: 0 auto calc(1.5 * var(--u));
+  box-shadow: 0 0 0 calc(0.5 * var(--u)) theme("colors.gold.500"), 0 0 0 calc(1.1 * var(--u)) rgb(201 162 74 / 0.25);
 }
 
 .a5-shop {
   font-family: "Aref Ruqaa", "Cairo", serif;
-  font-size: 21pt;
+  font-size: calc(7.41 * var(--u));
   font-weight: 700;
   line-height: 1.15;
   color: theme("colors.gold.300");
@@ -272,16 +296,16 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 2mm;
-  font-size: 8pt;
+  gap: calc(2 * var(--u));
+  font-size: calc(2.82 * var(--u));
   color: theme("colors.gold.200");
   letter-spacing: 0.08em;
 }
 .a5-ornament::before,
 .a5-ornament::after {
   content: "";
-  height: 0.25mm;
-  width: 12mm;
+  height: calc(0.25 * var(--u));
+  width: calc(12 * var(--u));
   background: linear-gradient(90deg, transparent, theme("colors.gold.400"));
 }
 .a5-ornament::after { transform: scaleX(-1); }
@@ -292,38 +316,38 @@
   z-index: 1;
   margin: -6mm auto 0;
   background: #fffdf8;
-  border: 0.5mm solid theme("colors.gold.500");
-  border-radius: 99mm;
-  padding: 1.2mm 7mm 1.4mm;
+  border: calc(0.5 * var(--u)) solid theme("colors.gold.500");
+  border-radius: calc(99 * var(--u));
+  padding: calc(1.2 * var(--u)) calc(7 * var(--u)) calc(1.4 * var(--u));
   text-align: center;
   box-shadow: 0 2px 6px rgb(6 21 15 / 0.15);
 }
 .a5-medal small {
   display: block;
-  font-size: 6.5pt;
+  font-size: calc(2.29 * var(--u));
   color: theme("colors.gold.800");
   letter-spacing: 0.1em;
 }
 .a5-medal b {
   display: block;
   font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
-  font-size: 15pt;
+  font-size: calc(5.29 * var(--u));
   letter-spacing: 0.06em;
   color: theme("colors.brand.800");
   line-height: 1.2;
 }
 .a5-medal span {
-  font-size: 6.5pt;
+  font-size: calc(2.29 * var(--u));
   color: theme("colors.slate.500");
 }
 
 .a5-body {
   position: relative;
   display: grid;
-  grid-template-columns: 1fr 36mm;
-  gap: 4mm;
+  grid-template-columns: 1fr calc(36 * var(--u));
+  gap: calc(4 * var(--u));
   align-items: start;
-  padding: 4mm 6mm 2mm;
+  padding: calc(4 * var(--u)) calc(6 * var(--u)) calc(2 * var(--u));
 }
 
 /* الشعار كعلامة مائية باهتة خلف البيانات. */
@@ -331,8 +355,8 @@
   position: absolute;
   inset: 0;
   margin: auto;
-  width: 55mm;
-  height: 55mm;
+  width: calc(55 * var(--u));
+  height: calc(55 * var(--u));
   border-radius: 50%;
   object-fit: cover;
   opacity: 0.05;
@@ -341,18 +365,18 @@
 
 .a5-title {
   font-family: "Aref Ruqaa", "Cairo", serif;
-  font-size: 11pt;
+  font-size: calc(3.88 * var(--u));
   font-weight: 700;
   color: theme("colors.brand.700");
-  margin-bottom: 1.2mm;
+  margin-bottom: calc(1.2 * var(--u));
   display: flex;
   align-items: center;
-  gap: 1.5mm;
+  gap: calc(1.5 * var(--u));
 }
 .a5-title::after {
   content: "";
   flex: 1;
-  height: 0.25mm;
+  height: calc(0.25 * var(--u));
   background: linear-gradient(270deg, theme("colors.gold.400"), transparent);
 }
 
@@ -360,21 +384,21 @@
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 1.1mm;
+  gap: calc(0.8 * var(--u));
   min-width: 0;
 }
 
 .a5-row {
   display: flex;
   justify-content: space-between;
-  gap: 2mm;
-  border-bottom: 0.2mm dashed theme("colors.gold.200");
-  padding-bottom: 0.9mm;
+  gap: calc(2 * var(--u));
+  border-bottom: calc(0.2 * var(--u)) dashed theme("colors.gold.200");
+  padding-bottom: calc(0.9 * var(--u));
 }
 .a5-row dt {
   flex-shrink: 0;
   color: theme("colors.gold.800");
-  font-size: 8pt;
+  font-size: calc(2.82 * var(--u));
 }
 .a5-row dd {
   font-weight: 700;
@@ -383,50 +407,50 @@
   overflow-wrap: anywhere;
 }
 
-/* نص العطل الطويل لا يدفع الإيصال لصفحة ثانية — ثلاثة أسطر كحد أقصى. */
+/* نص العطل الطويل لا يدفع الإيصال لصفحة ثانية — سطران كحد أقصى. */
 .a5-clamp {
   display: -webkit-box;
-  -webkit-line-clamp: 3;
+  -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
 
 .a5-price {
-  margin-top: 1.5mm;
+  margin-top: calc(1.5 * var(--u));
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border: 0.3mm solid theme("colors.gold.400");
+  border: calc(0.3 * var(--u)) solid theme("colors.gold.400");
   background: linear-gradient(90deg, theme("colors.gold.50"), #fff);
-  border-radius: 1.5mm;
-  padding: 1.3mm 2.5mm;
+  border-radius: calc(1.5 * var(--u));
+  padding: calc(1.3 * var(--u)) calc(2.5 * var(--u));
 }
-.a5-price span { font-size: 8pt; color: theme("colors.gold.800"); }
-.a5-price b { font-size: 12pt; color: theme("colors.brand.800"); }
+.a5-price span { font-size: calc(2.82 * var(--u)); color: theme("colors.gold.800"); }
+.a5-price b { font-size: calc(4.23 * var(--u)); color: theme("colors.brand.800"); }
 
 .a5-side {
   position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 1.2mm;
+  gap: calc(1.2 * var(--u));
 }
 
 .a5-frame {
-  padding: 0.9mm;
-  border: 0.4mm solid theme("colors.gold.500");
-  border-radius: 1.8mm;
+  padding: calc(0.9 * var(--u));
+  border: calc(0.4 * var(--u)) solid theme("colors.gold.500");
+  border-radius: calc(1.8 * var(--u));
   background: #fff;
 }
 .a5-frame > div,
 .a5-frame > img {
-  border: 0.2mm solid theme("colors.gold.200");
-  border-radius: 1.2mm;
+  border: calc(0.2 * var(--u)) solid theme("colors.gold.200");
+  border-radius: calc(1.2 * var(--u));
 }
 
 .a5-photo {
-  width: 32mm;
-  height: 32mm;
+  width: calc(32 * var(--u));
+  height: calc(32 * var(--u));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -440,35 +464,35 @@
 }
 
 .a5-caption {
-  font-size: 6.5pt;
+  font-size: calc(2.29 * var(--u));
   color: theme("colors.gold.800");
   text-align: center;
   line-height: 1.25;
 }
 
 .a5-qr {
-  padding: 1mm;
+  padding: calc(1 * var(--u));
   background: #fff;
 }
 .a5-qr svg {
-  width: 23mm !important;
-  height: 23mm !important;
+  width: calc(23 * var(--u)) !important;
+  height: calc(23 * var(--u)) !important;
   display: block;
 }
 
 .a5-signs {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 8mm;
-  padding: 3mm 8mm 3mm;
-  font-size: 7pt;
+  gap: calc(8 * var(--u));
+  padding: calc(3 * var(--u)) calc(8 * var(--u)) calc(3 * var(--u));
+  font-size: calc(2.47 * var(--u));
   color: theme("colors.slate.500");
   text-align: center;
 }
 .a5-signs div {
-  border-top: 0.25mm solid theme("colors.gold.400");
-  padding-top: 0.8mm;
-  margin-top: 6mm;
+  border-top: calc(0.25 * var(--u)) solid theme("colors.gold.400");
+  padding-top: calc(0.8 * var(--u));
+  margin-top: calc(4 * var(--u));
 }
 
 .a5-foot {
@@ -476,11 +500,11 @@
   background: linear-gradient(180deg, theme("colors.brand.800"), theme("colors.brand.950"));
   color: theme("colors.gold.200");
   text-align: center;
-  padding: 2.2mm 6mm 2.6mm;
-  font-size: 7.5pt;
+  padding: calc(2.2 * var(--u)) calc(6 * var(--u)) calc(2.6 * var(--u));
+  font-size: calc(2.65 * var(--u));
 }
 .a5-foot p + p {
-  margin-top: 0.4mm;
-  font-size: 6.5pt;
+  margin-top: calc(0.4 * var(--u));
+  font-size: calc(2.29 * var(--u));
   color: theme("colors.gold.400");
 }

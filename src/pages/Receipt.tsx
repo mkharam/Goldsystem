@@ -7,13 +7,9 @@ import { qrSvg, trackingUrl } from "@/lib/qr";
 import { Logo } from "@/components/Logo";
 import type { TicketWithRelations } from "@/lib/types";
 
-// عرض الورقة بالبكسل عند 96dpi (118 مم) — نصغّر المعاينة على الشاشة الضيقة فقط.
-const SHEET_PX = (118 / 25.4) * 96;
-
 /**
- * إيصال بمقاس ثابت بالمليمتر (118×175 مم، راجع ‎.a5-sheet في index.css) يطبع كما هو على
- * ورقة A5 من آيفون أو لابتوب بلا تكبير ولا تصغير: أصغر من مساحة الطباعة في A5 حتى مع
- * هوامش سفاري الإجبارية، ولا يتجاوز صفحة واحدة مهما طال نص العطل.
+ * إيصال فاخر كل مقاساته نسبية لعرضه (راجع ‎.a5-wrap في index.css): على الشاشة بعرض الهاتف،
+ * وعند الطباعة يملأ عرض الورقة (A5 أو A4) من آيفون أو لابتوب في صفحة واحدة.
  */
 export default function Receipt() {
   const { id } = useParams<{ id: string }>();
@@ -21,7 +17,6 @@ export default function Receipt() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [qr, setQr] = useState("");
   const [photo, setPhoto] = useState<string | null>(null);
-  const [fit, setFit] = useState(1);
   const photoRef = useRef<HTMLImageElement>(null);
 
   useEffect(() => {
@@ -42,13 +37,6 @@ export default function Receipt() {
       }
     })();
   }, [id]);
-
-  useEffect(() => {
-    const update = () => setFit(Math.min(1, (window.innerWidth - 24) / SHEET_PX));
-    update();
-    window.addEventListener("resize", update);
-    return () => window.removeEventListener("resize", update);
-  }, []);
 
   // لا نطبع قبل اكتمال تحميل الصورة، وإلا خرج الإيصال بمربع فارغ.
   async function print() {
@@ -72,7 +60,8 @@ export default function Receipt() {
         <button type="button" onClick={print} className="btn-primary flex-1">طباعة</button>
       </div>
 
-      <div className="a5-sheet" style={{ "--fit": fit } as React.CSSProperties}>
+      <div className="a5-wrap">
+      <div className="a5-sheet">
         {(["tr", "tl", "br", "bl"] as const).map((c) => <Corner key={c} className={c} />)}
 
         <header className="a5-band">
@@ -139,6 +128,7 @@ export default function Receipt() {
           <p>{settings.receipt_footer}</p>
           {ticket.branch?.phone && <p dir="ltr">{ticket.branch.phone}</p>}
         </footer>
+      </div>
       </div>
     </div>
   );
