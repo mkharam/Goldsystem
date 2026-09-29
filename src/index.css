@@ -168,15 +168,185 @@
     print-color-adjust: exact;
   }
 
-  /* لا نقطع بطاقة الإيصال بين صفحتين — طابعة حرارية أو A4 كلاهما يُفترض
-     أن يُخرج الإيصال كاملاً على ورقة واحدة. */
+  /* لا نقطع بطاقة الإيصال بين صفحتين. */
   .card {
     break-inside: avoid;
   }
 
-  /* الإيصال يُطبع على ورقة A5 — المقاس يُحدَّد هنا حتى يختاره المتصفح تلقائياً. */
+  /* ورقة A5 يختارها المتصفح تلقائياً (كروم/إيدج). سفاري آيفون يفرض هوامشه الخاصة
+     (~12.7 مم) — لذلك الإيصال نفسه 118×175 مم، أصغر من المساحة المطبوعة في الحالتين،
+     فلا يحتاج أي متصفح لتصغيره أو تكبيره. */
   @page {
     size: A5 portrait;
-    margin: 8mm;
+    margin: 10mm;
   }
+
+  html,
+  body {
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #fff !important;
+  }
+
+  .a5-sheet {
+    zoom: 1 !important;
+    margin: 0 auto !important;
+    box-shadow: none !important;
+    border: 0 !important;
+    break-inside: avoid;
+    page-break-after: avoid;
+  }
+}
+
+/* ============ إيصال A5 — كل المقاسات بالمليمتر/النقطة حتى يُطبع بحجمه الحقيقي ============ */
+.a5-sheet {
+  width: 118mm;
+  max-height: 175mm;
+  overflow: hidden;
+  box-sizing: border-box;
+  margin: 0 auto;
+  padding: 5mm 5mm 4mm;
+  background: #fff;
+  color: #0f172a;
+  font-size: 9.5pt;
+  line-height: 1.35;
+  display: flex;
+  flex-direction: column;
+  gap: 3mm;
+  border: 1px solid theme("colors.slate.200");
+  border-radius: 3mm;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.08);
+  /* معاينة الشاشة: نفس الورقة مصغّرة لتناسب الهاتف (الطباعة تعيدها 1). */
+  zoom: var(--fit, 1);
+}
+
+.a5-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 3mm;
+}
+
+.a5-sheet .a5-logo {
+  width: 13mm !important;
+  height: 13mm !important;
+}
+
+.a5-shop {
+  font-size: 13pt;
+  font-weight: 700;
+  color: theme("colors.brand.900");
+}
+
+.a5-muted {
+  font-size: 7.5pt;
+  color: theme("colors.slate.500");
+}
+
+.a5-number {
+  text-align: center;
+  border: 1px solid theme("colors.brand.100");
+  background: theme("colors.brand.50");
+  border-radius: 2mm;
+  padding: 1.5mm 3mm;
+}
+
+.a5-number p {
+  font-size: 15pt;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: theme("colors.brand.800");
+}
+
+.a5-number span {
+  font-size: 7pt;
+  color: theme("colors.slate.500");
+}
+
+.a5-body {
+  display: grid;
+  grid-template-columns: 1fr 38mm;
+  gap: 4mm;
+  align-items: start;
+}
+
+.a5-details {
+  display: flex;
+  flex-direction: column;
+  gap: 1.4mm;
+  min-width: 0;
+}
+
+.a5-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 2mm;
+  border-bottom: 0.2mm dotted theme("colors.slate.200");
+  padding-bottom: 1mm;
+}
+
+.a5-row dt {
+  flex-shrink: 0;
+  color: theme("colors.slate.500");
+}
+
+.a5-row dd {
+  font-weight: 600;
+  text-align: left;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* نص العطل الطويل لا يدفع الإيصال لصفحة ثانية — أربعة أسطر كحد أقصى. */
+.a5-clamp {
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.a5-side {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5mm;
+}
+
+.a5-photo {
+  width: 38mm;
+  height: 38mm;
+  border: 1px solid theme("colors.slate.200");
+  border-radius: 2mm;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #fff;
+}
+
+.a5-photo img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.a5-qr svg {
+  width: 26mm !important;
+  height: 26mm !important;
+  display: block;
+}
+
+.a5-foot {
+  display: flex;
+  flex-direction: column;
+  gap: 1mm;
+  text-align: center;
+  font-size: 8pt;
+  color: theme("colors.slate.600");
+}
+
+.a5-url {
+  font-size: 6pt;
+  color: theme("colors.slate.400");
+  overflow-wrap: anywhere;
 }
