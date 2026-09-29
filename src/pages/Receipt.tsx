@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { getTicket, getSettings, type Settings } from "@/lib/tickets";
+import { getTicket, getSettings, getPhotos, type Settings } from "@/lib/tickets";
+import { signedPhotoUrls } from "@/lib/supabase";
 import { formatDateTime, formatWeight, formatMoney } from "@/lib/format";
 import { qrSvg, trackingUrl } from "@/lib/qr";
 import { Logo } from "@/components/Logo";
@@ -12,13 +13,20 @@ export default function Receipt() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [qr, setQr] = useState("");
   const [url, setUrl] = useState("");
+  const [photo, setPhoto] = useState<string | null>(null);
 
   useEffect(() => {
     if (!id) return;
     (async () => {
-      const [t, s] = await Promise.all([getTicket(id), getSettings()]);
+      const [t, s, photos] = await Promise.all([getTicket(id), getSettings(), getPhotos(id)]);
       setTicket(t);
       setSettings(s);
+      // صورة القطعة عند الاستلام تحمي المحل والزبون معاً: شكلها كما سُلّمت، مطبوعاً على الإيصال.
+      const first = photos.find((p) => p.stage === "intake") ?? photos[0];
+      if (first) {
+        const urls = await signedPhotoUrls([first.storage_path]);
+        setPhoto(urls[first.storage_path] ?? null);
+      }
       if (t) {
         const link = trackingUrl(t.tracking_token);
         setUrl(link);
@@ -32,7 +40,8 @@ export default function Receipt() {
   }
 
   return (
-    <div className="mx-auto max-w-sm p-4">
+    // مقاس الإيصال ورقة A5 (148×210 مم): عرض الشاشة يقارب عرض الورقة حتى يطابق ما يُرى ما يُطبع.
+    <div className="receipt-a5 mx-auto max-w-[560px] p-4 print:max-w-none print:p-0">
       <div className="no-print mb-4 flex gap-2">
         <Link to={`/tickets/${ticket.id}`} className="btn-ghost flex-1">التذكرة</Link>
         <button type="button" onClick={() => window.print()} className="btn-primary flex-1">طباعة</button>
@@ -46,11 +55,21 @@ export default function Receipt() {
           <p className="text-xs text-gold-300/80 print:text-slate-600">إيصال استلام صيانة</p>
         </div>
 
-        <div className="p-5">
+        <div className="p-5 print:px-1 print:py-3">
           <div className="mb-4 rounded-lg border border-brand-100 bg-brand-50 py-3 text-center">
             <p className="font-mono text-2xl font-bold tracking-wider text-brand-800">{ticket.ticket_number}</p>
             <p className="mt-0.5 text-xs text-slate-500">{formatDateTime(ticket.received_at)}</p>
           </div>
+
+          {photo && (
+            <div className="mb-4 flex justify-center">
+              <img
+                src={photo}
+                alt="صورة القطعة"
+                className="h-44 w-auto max-w-full rounded-lg border border-slate-200 object-contain print:h-[52mm]"
+              />
+            </div>
+          )}
 
           <dl className="space-y-1.5 text-sm">
             <Row label="الزبون" value={ticket.customer?.full_name ?? "—"} />
@@ -61,6 +80,7 @@ export default function Receipt() {
             <Row label="العطل" value={ticket.problem_description} />
             {ticket.estimated_cost !== null && <Row label="السعر التقريبي" value={formatMoney(ticket.estimated_cost)} />}
             {ticket.promised_at && <Row label="موعد التسليم" value={formatDateTime(ticket.promised_at)} />}
+            {ticket.received_by_staff?.full_name && <Row label="الموظف" value={ticket.received_by_staff.full_name} />}
             {ticket.branch?.name && <Row label="الفرع" value={ticket.branch.name} />}
             {ticket.branch?.phone && <Row label="هاتف الفرع" value={ticket.branch.phone} ltr />}
           </dl>

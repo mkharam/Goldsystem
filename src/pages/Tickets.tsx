@@ -9,6 +9,7 @@ import { REPAIR_STATUS } from "@/lib/constants";
 import type { RepairStatus, TicketWithRelations } from "@/lib/types";
 
 const FILTERS: { key: string; label: string }[] = [
+  { key: "all", label: "الكل" },
   { key: "open", label: "المفتوحة" },
   { key: "overdue", label: "المتأخّرة" },
   ...(Object.keys(REPAIR_STATUS) as RepairStatus[]).map((s) => ({ key: s, label: REPAIR_STATUS[s].label })),
@@ -18,9 +19,17 @@ export default function Tickets() {
   const { staff } = useAuth();
   const branches = useBranches();
   const [branch, setBranch] = useState<string | "all">(staff?.branch_id ?? "all");
-  const [params] = useSearchParams();
-  const status = params.get("status") ?? "open";
-  const [search, setSearch] = useState("");
+  const [params, setParams] = useSearchParams();
+  // الصفحة تعرض كل التذاكر من الأحدث افتراضياً؛ المرشّحات تضيّقها عند الحاجة.
+  const status = params.get("status") ?? "all";
+  // البحث في الرابط: يصل إليه البحث من الرئيسية، ويبقى عند الرجوع من تفاصيل تذكرة.
+  const search = params.get("q") ?? "";
+  const setSearch = (q: string) => {
+    const next = new URLSearchParams(params);
+    if (q) next.set("q", q);
+    else next.delete("q");
+    setParams(next, { replace: true });
+  };
   const [tickets, setTickets] = useState<TicketWithRelations[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -31,9 +40,11 @@ export default function Tickets() {
     setLoading(true);
     const timer = setTimeout(() => {
       listTickets({
-        status: status as RepairStatus | "open" | "overdue",
+        status: status as RepairStatus | "open" | "overdue" | "all",
         search,
         branchId: branch === "all" ? undefined : branch,
+        newest: true,
+        limit: 200,
       })
         .then((rows) => active && setTickets(rows))
         .finally(() => active && setLoading(false));
@@ -49,7 +60,7 @@ export default function Tickets() {
       <div className="relative mb-3">
         <input
           className="field pr-10"
-          placeholder="ابحث برقم التذكرة أو اسم القطعة"
+          placeholder="ابحث بأي شيء: الاسم، الهاتف، القطعة، الموظف، التاريخ 28/9…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
@@ -84,7 +95,8 @@ export default function Tickets() {
             return (
               <Link
                 key={filter.key}
-                to={`/tickets?status=${filter.key}`}
+                to={`/tickets?status=${filter.key}${search ? `&q=${encodeURIComponent(search)}` : ""}`}
+                replace
                 className={`whitespace-nowrap rounded-full border px-3 py-1.5 text-sm transition active:scale-95 ${
                   active
                     ? "border-brand-700 bg-brand-700 font-semibold text-gold-100"
