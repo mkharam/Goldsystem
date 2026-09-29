@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { StatusBadge } from "./StatusBadge";
-import { formatWeight, overdueLabel, daysFromNow } from "@/lib/format";
+import { formatWeight, overdueLabel, daysFromNow, formatDateTime } from "@/lib/format";
 import { OPEN_STATUSES } from "@/lib/constants";
 import type { TicketWithRelations } from "@/lib/types";
 
@@ -37,6 +37,15 @@ export function TicketCard({ ticket, index = 0 }: { ticket: TicketWithRelations;
         {ticket.weight_in_grams !== null && <span>{formatWeight(ticket.weight_in_grams)}</span>}
         {ticket.branch?.name && <span>{ticket.branch.name}</span>}
         {due && <span className={isOverdue ? "font-semibold text-red-600" : "text-slate-500"}>{due}</span>}
+      </div>
+
+      {/* من استلم القطعة ومتى — الزبون يسأل كثيراً "مع من تركتها؟". */}
+      <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-slate-100 pt-1.5 text-xs text-slate-500">
+        <span>
+          <span className="text-slate-400">الموظف: </span>
+          <span className="font-medium text-slate-700">{ticket.received_by_staff?.full_name ?? "—"}</span>
+        </span>
+        <span className="text-slate-400">{formatDateTime(ticket.received_at)}</span>
       </div>
     </Link>
   );

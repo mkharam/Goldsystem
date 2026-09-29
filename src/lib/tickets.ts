@@ -1,7 +1,7 @@
 import { supabase } from "./supabase";
 import { OPEN_STATUSES, ALLOWED_TRANSITIONS } from "./constants";
 import { setItemStatus, lookupCustomers, createInventoryCustomer, syncTickets } from "./inventory";
-import { phoneDigits } from "./constants";
+import { phoneDigits, normalizeDigits } from "./constants";
 import type { RepairStatus, TicketWithRelations, StatusHistoryEntry, RepairPhoto, Customer } from "./types";
 
 const TICKET_SELECT = `
@@ -13,11 +13,34 @@ const TICKET_SELECT = `
 `;
 
 export type TicketFilters = {
-  status?: RepairStatus | "open" | "overdue";
+  status?: RepairStatus | "open" | "overdue" | "all";
   branchId?: string;
   search?: string;
   limit?: number;
+  /** الأحدث أولاً (صفحة التذاكر) بدل الأقرب موعداً (لوحة اليوم). */
+  newest?: boolean;
 };
+
+/**
+ * يفهم التاريخ كما يكتبه الموظف: 28/9 أو 28-9-2026 أو 2026-09-28 — ويعيد بداية اليوم
+ * ونهايته بتوقيت الجهاز. أي نص آخر ليس تاريخاً.
+ */
+export function parseSearchDate(term: string): { from: string; to: string } | null {
+  let y: number, m: number, d: number;
+  let match = term.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/);
+  if (match) [y, m, d] = [Number(match[1]), Number(match[2]), Number(match[3])];
+  else {
+    match = term.match(/^(\d{1,2})[-/.](\d{1,2})(?:[-/.](\d{2,4}))?$/);
+    if (!match) return null;
+    d = Number(match[1]);
+    m = Number(match[2]);
+    y = match[3] ? Number(match[3].length === 2 ? `20${match[3]}` : match[3]) : new Date().getFullYear();
+  }
+  const start = new Date(y, m - 1, d);
+  if (start.getMonth() !== m - 1 || start.getDate() !== d) return null;
+  const end = new Date(y, m - 1, d + 1);
+  return { from: start.toISOString(), to: end.toISOString() };
+}
 
 export async function listTickets(filters: TicketFilters = {}): Promise<TicketWithRelations[]> {
   let query = supabase.from("repair_tickets").select(TICKET_SELECT);
@@ -30,14 +53,41 @@ export async function listTickets(filters: TicketFilters = {}): Promise<TicketWi
   if (filters.branchId) query = query.eq("branch_id", filters.branchId);
 
   if (filters.search?.trim()) {
-    const term = filters.search.trim().replace(/[,()]/g, "");
-    query = query.or(`ticket_number.ilike.%${term}%,item_name.ilike.%${term}%`);
+    const term = normalizeDigits(filters.search.trim()).replace(/[,()%*"\\]/g, "");
+    // الزبون يأتي غالباً بلا إيصال — نبحث باسمه أو رقم هاتفه أيضاً، لا برقم التذكرة وحده.
+    const digits = phoneDigits(term);
+    const customerFilter = digits.length >= 3
+      ? `full_name.ilike.%${term}%,phone.ilike.%${digits.slice(-6)}%`
+      : `full_name.ilike.%${term}%`;
+    // بحث بأي طريقة: رقم التذكرة، الزبون (اسم/هاتف)، القطعة ونوعها وعيارها، العطل،
+    // الموظف الذي استلمها، أو تاريخ الاستلام.
+    const [{ data: customers }, { data: staffRows }] = await Promise.all([
+      supabase.from("customers").select("id").or(customerFilter).limit(50),
+      supabase.from("staff").select("id").ilike("full_name", `%${term}%`).limit(20),
+    ]);
+    const ids = (customers ?? []).map((c) => c.id);
+    const staffIds = (staffRows ?? []).map((s) => s.id);
+    const parts = [
+      `ticket_number.ilike.%${term}%`,
+      `item_name.ilike.%${term}%`,
+      `item_type.ilike.%${term}%`,
+      `karat.ilike.%${term}%`,
+      `problem_description.ilike.%${term}%`,
+      `work_done.ilike.%${term}%`,
+    ];
+    if (ids.length) parts.push(`customer_id.in.(${ids.join(",")})`);
+    if (staffIds.length) parts.push(`received_by.in.(${staffIds.join(",")})`);
+    const day = parseSearchDate(term);
+    if (day) parts.push(`and(received_at.gte."${day.from}",received_at.lt."${day.to}")`);
+    query = query.or(parts.join(","));
   }
 
-  const { data, error } = await query
-    .order("promised_at", { ascending: true, nullsFirst: false })
-    .order("created_at", { ascending: false })
-    .limit(filters.limit ?? 100);
+  query = filters.newest
+    ? query.order("created_at", { ascending: false })
+    : query
+        .order("promised_at", { ascending: true, nullsFirst: false })
+        .order("created_at", { ascending: false });
+  const { data, error } = await query.limit(filters.limit ?? 100);
 
   if (error) throw new Error(error.message);
   return (data ?? []) as unknown as TicketWithRelations[];
