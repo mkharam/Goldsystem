@@ -20,7 +20,6 @@ export default function Receipt() {
   const [ticket, setTicket] = useState<TicketWithRelations | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [qr, setQr] = useState("");
-  const [url, setUrl] = useState("");
   const [photo, setPhoto] = useState<string | null>(null);
   const [fit, setFit] = useState(1);
   const photoRef = useRef<HTMLImageElement>(null);
@@ -39,7 +38,6 @@ export default function Receipt() {
       }
       if (t) {
         const link = trackingUrl(t.tracking_token);
-        setUrl(link);
         setQr(await qrSvg(link, 150));
       }
     })();
@@ -75,56 +73,86 @@ export default function Receipt() {
       </div>
 
       <div className="a5-sheet" style={{ "--fit": fit } as React.CSSProperties}>
-        <header className="a5-head">
-          <div className="flex items-center gap-[3mm]">
-            <Logo size={48} className="a5-logo" />
-            <div>
-              <h1 className="a5-shop">{settings.shop_name}</h1>
-              <p className="a5-muted">إيصال استلام صيانة</p>
-            </div>
-          </div>
-          <div className="a5-number">
-            <p className="font-mono">{ticket.ticket_number}</p>
-            <span>{formatDateTime(ticket.received_at)}</span>
-          </div>
+        {(["tr", "tl", "br", "bl"] as const).map((c) => <Corner key={c} className={c} />)}
+
+        <header className="a5-band">
+          <Logo size={56} className="a5-logo" />
+          <h1 className="a5-shop">{settings.shop_name}</h1>
+          <p className="a5-ornament">إيصال استلام صيانة</p>
         </header>
 
-        <div className="brand-hairline" />
+        <div className="a5-medal">
+          <small>رقم الإيصال</small>
+          <b dir="ltr">{ticket.ticket_number}</b>
+          <span>{formatDateTime(ticket.received_at)}</span>
+        </div>
 
         <div className="a5-body">
-          <dl className="a5-details">
-            <Row label="الزبون" value={ticket.customer?.full_name ?? "—"} />
-            <Row label="الهاتف" value={ticket.customer?.phone ?? "—"} ltr />
-            <Row label="القطعة" value={ticket.item_name} />
-            {ticket.karat && <Row label="العيار" value={ticket.karat} />}
-            {ticket.weight_in_grams !== null && <Row label="الوزن" value={formatWeight(ticket.weight_in_grams)} />}
-            <Row label="العطل" value={ticket.problem_description} clamp />
-            {ticket.estimated_cost !== null && <Row label="السعر التقريبي" value={formatMoney(ticket.estimated_cost)} />}
-            {ticket.promised_at && <Row label="موعد التسليم" value={formatDateTime(ticket.promised_at)} />}
-            {ticket.received_by_staff?.full_name && <Row label="الموظف" value={ticket.received_by_staff.full_name} />}
-            {ticket.branch?.name && <Row label="الفرع" value={ticket.branch.name} />}
-            {ticket.branch?.phone && <Row label="هاتف الفرع" value={ticket.branch.phone} ltr />}
-          </dl>
+          <img src={`${import.meta.env.BASE_URL}logo.jpg`} alt="" className="a5-watermark" />
+
+          <div className="relative min-w-0">
+            <p className="a5-title">بيانات القطعة</p>
+            <dl className="a5-details">
+              <Row label="الزبون" value={ticket.customer?.full_name ?? "—"} />
+              <Row label="الهاتف" value={ticket.customer?.phone ?? "—"} ltr />
+              <Row label="القطعة" value={ticket.item_name} />
+              {ticket.karat && <Row label="العيار" value={ticket.karat} />}
+              {ticket.weight_in_grams !== null && <Row label="الوزن" value={formatWeight(ticket.weight_in_grams)} />}
+              <Row label="العطل" value={ticket.problem_description} clamp />
+              {ticket.promised_at && <Row label="موعد التسليم" value={formatDateTime(ticket.promised_at)} />}
+              {ticket.received_by_staff?.full_name && <Row label="الموظف" value={ticket.received_by_staff.full_name} />}
+              {ticket.branch?.name && <Row label="الفرع" value={ticket.branch.name} />}
+            </dl>
+            {ticket.estimated_cost !== null && (
+              <div className="a5-price">
+                <span>السعر التقريبي</span>
+                <b>{formatMoney(ticket.estimated_cost)}</b>
+              </div>
+            )}
+          </div>
 
           <aside className="a5-side">
             {photo && (
-              <div className="a5-photo">
-                <img ref={photoRef} src={photo} alt="صورة القطعة" />
-              </div>
+              <>
+                <div className="a5-frame">
+                  <div className="a5-photo">
+                    <img ref={photoRef} src={photo} alt="صورة القطعة" />
+                  </div>
+                </div>
+                <p className="a5-caption">صورة القطعة عند الاستلام</p>
+              </>
             )}
             {/* الزبون يتابع حالة قطعته بمسح الرمز — بلا تطبيق ولا تسجيل دخول. */}
-            <div className="a5-qr" dangerouslySetInnerHTML={{ __html: qr }} />
-            <p className="a5-muted text-center">امسح الرمز لمتابعة حالة قطعتك</p>
+            <div className="a5-frame">
+              <div className="a5-qr" dangerouslySetInnerHTML={{ __html: qr }} />
+            </div>
+            <p className="a5-caption">امسح الرمز لمتابعة<br />حالة قطعتك</p>
           </aside>
         </div>
 
+        <div className="a5-signs">
+          <div>توقيع الموظف</div>
+          <div>توقيع الزبون</div>
+        </div>
+
         <footer className="a5-foot">
-          <div className="brand-hairline" />
           <p>{settings.receipt_footer}</p>
-          <p className="a5-url" dir="ltr">{url}</p>
+          {ticket.branch?.phone && <p dir="ltr">{ticket.branch.phone}</p>}
         </footer>
       </div>
     </div>
+  );
+}
+
+/** زخرفة ركن ذهبية — تُقلب بالـCSS لتناسب كل ركن. */
+function Corner({ className }: { className: string }) {
+  return (
+    <svg className={`a5-corner ${className}`} viewBox="0 0 28 28" fill="none" aria-hidden="true">
+      <path d="M27 3H9a6 6 0 0 0-6 6v18" stroke="currentColor" strokeWidth="1.4" />
+      <path d="M22 7H11a4 4 0 0 0-4 4v11" stroke="currentColor" strokeWidth="0.7" />
+      <path d="M3 3l3.2 3.2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+      <circle cx="9" cy="9" r="1.3" fill="currentColor" />
+    </svg>
   );
 }
 
