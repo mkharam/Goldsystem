@@ -105,7 +105,6 @@ function ReceiptSheet({ id, settings }: { id: string; settings: Settings }) {
             {ticket.weight_in_grams !== null && <Row label="الوزن" value={formatWeight(ticket.weight_in_grams)} />}
             <Row label="العطل" value={ticket.problem_description} clamp />
             {ticket.promised_at && <Row label="موعد التسليم" value={formatDateTime(ticket.promised_at)} />}
-            {ticket.received_by_staff?.full_name && <Row label="الموظف" value={ticket.received_by_staff.full_name} />}
             {ticket.branch?.name && <Row label="الفرع" value={ticket.branch.name} />}
           </dl>
           {ticket.estimated_cost !== null && (
@@ -135,11 +134,6 @@ function ReceiptSheet({ id, settings }: { id: string; settings: Settings }) {
         </aside>
       </div>
 
-      <div className="a5-signs">
-        <div>توقيع الموظف</div>
-        <div>توقيع الزبون</div>
-      </div>
-
       <footer className="a5-foot">
         <p>{settings.receipt_footer}</p>
         {ticket.branch?.phone && <p dir="ltr">{ticket.branch.phone}</p>}
@@ -149,11 +143,15 @@ function ReceiptSheet({ id, settings }: { id: string; settings: Settings }) {
   );
 }
 
-type Piece = { ticket: TicketWithRelations; photo: string | null; qr: string };
+type Piece = { ticket: TicketWithRelations; photo: string | null };
 
-/** إيصال واحد لكل قطع الزبون. */
+/**
+ * إيصال واحد لكل قطع الزبون — بطاقة فاخرة لا فاتورة: بيانات الزبون مع رمز QR واحد
+ * (يفتح صفحة متابعة تعرض كل قطع هذه الزيارة)، ثم القطع كصفوف أنيقة بصورها، ثم الإجمالي.
+ */
 function CombinedSheet({ ids, settings }: { ids: string[]; settings: Settings }) {
   const [pieces, setPieces] = useState<Piece[] | null>(null);
+  const [qr, setQr] = useState("");
 
   useEffect(() => {
     (async () => {
@@ -165,14 +163,11 @@ function CombinedSheet({ ids, settings }: { ids: string[]; settings: Settings })
       const valid: { ticket: TicketWithRelations; path: string | null }[] = [];
       for (const x of loaded) if (x.ticket) valid.push({ ticket: x.ticket, path: x.path });
       const urls = await signedPhotoUrls(valid.map((x) => x.path).filter((p): p is string => !!p));
-      const out = await Promise.all(valid.map(async ({ ticket, path }) => ({
-        ticket,
-        photo: path ? urls[path] ?? null : null,
-        qr: await qrSvg(trackingUrl(ticket.tracking_token), 120),
-      })));
+      const out = valid.map(({ ticket, path }) => ({ ticket, photo: path ? urls[path] ?? null : null }));
       // بترتيب رقم التذكرة — نفس ترتيب إدخالها.
       out.sort((a, b) => a.ticket.ticket_number.localeCompare(b.ticket.ticket_number));
       setPieces(out);
+      if (out[0]) setQr(await qrSvg(trackingUrl(out[0].ticket.tracking_token), 150));
     })();
   }, [ids.join(",")]);
 
@@ -196,75 +191,63 @@ function CombinedSheet({ ids, settings }: { ids: string[]; settings: Settings })
       </header>
 
       <div className="a5-medal">
-        <small>عدد القطع</small>
-        <b>{pieces.length} قطع</b>
+        <small>{pieces.length} قطع</small>
+        <b dir="ltr">{first.ticket_number}</b>
         <span>{formatDateTime(first.received_at)}</span>
       </div>
 
-      <div className="a5-body a5-body-multi">
+      <div className="a5-body">
         <img src={`${import.meta.env.BASE_URL}logo.jpg`} alt="" className="a5-watermark" />
 
-        <dl className="a5-details a5-grid2">
-          <Row label="الزبون" value={first.customer?.full_name ?? "—"} />
-          <Row label="الهاتف" value={first.customer?.phone ?? "—"} ltr />
-          {first.promised_at && <Row label="موعد التسليم" value={formatDateTime(first.promised_at)} />}
-          {first.received_by_staff?.full_name && <Row label="الموظف" value={first.received_by_staff.full_name} />}
-          {first.branch?.name && <Row label="الفرع" value={first.branch.name} />}
-        </dl>
+        <div className="relative min-w-0">
+          <p className="a5-title">بيانات الزبون</p>
+          <dl className="a5-details">
+            <Row label="الاسم" value={first.customer?.full_name ?? "—"} />
+            <Row label="الهاتف" value={first.customer?.phone ?? "—"} ltr />
+            {first.promised_at && <Row label="موعد التسليم" value={formatDateTime(first.promised_at)} />}
+            {first.branch?.name && <Row label="الفرع" value={first.branch.name} />}
+          </dl>
+        </div>
 
+        {/* رمز واحد لكل القطع: صفحة المتابعة تعرض قطع هذه الزيارة كلها. */}
+        <aside className="a5-side">
+          <div className="a5-frame">
+            <div className="a5-qr" dangerouslySetInnerHTML={{ __html: qr }} />
+          </div>
+          <p className="a5-caption">امسح الرمز لمتابعة<br />كل قطعك</p>
+        </aside>
+      </div>
+
+      <div className="a5-pieces">
         <p className="a5-title">القطع</p>
-        <table className="a5-table">
-          <thead>
-            <tr>
-              <th>#</th>
-              <th />
-              <th className="a5-col-item">القطعة</th>
-              <th>المطلوب</th>
-              <th>السعر</th>
-            </tr>
-          </thead>
-          <tbody>
-            {pieces.map(({ ticket: t, photo }, i) => (
-              <tr key={t.id}>
-                <td className="a5-num">{i + 1}</td>
-                <td>{photo ? <img src={photo} alt="" className="a5-thumb" /> : <span className="a5-thumb a5-thumb-empty" />}</td>
-                <td>
-                  <b>{t.item_name}</b>
-                  <span className="a5-sub">
-                    {[t.karat, t.weight_in_grams !== null ? formatWeight(t.weight_in_grams) : null].filter(Boolean).join(" · ")}
-                  </span>
-                </td>
-                <td><span className="a5-clamp">{t.problem_description}</span></td>
-                <td className="a5-cost">{t.estimated_cost !== null ? formatMoney(t.estimated_cost) : "لاحقاً"}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        {pieces.map(({ ticket: t, photo }, i) => (
+          <div key={t.id} className="a5-piece">
+            <div className="a5-piece-photo">
+              {photo ? <img src={photo} alt="" /> : <Logo size={40} className="a5-piece-logo" />}
+              <span className="a5-piece-num">{i + 1}</span>
+            </div>
+            <div className="a5-piece-body">
+              <p className="a5-piece-name">{t.item_name}</p>
+              <p className="a5-piece-meta">
+                {[t.karat, t.weight_in_grams !== null ? formatWeight(t.weight_in_grams) : null].filter(Boolean).join("  ·  ")}
+              </p>
+              <p className="a5-piece-work a5-clamp">{t.problem_description}</p>
+            </div>
+            <div className="a5-piece-price">
+              <b>{t.estimated_cost !== null ? formatMoney(t.estimated_cost) : "لاحقاً"}</b>
+              <span dir="ltr">{t.ticket_number}</span>
+            </div>
+          </div>
+        ))}
 
-        <div className="a5-price">
+        <div className="a5-price a5-total">
           <span>
             الإجمالي التقريبي
-            {totalWeight > 0 && <> · الوزن {formatWeight(totalWeight)}</>}
-            {priced.length < pieces.length && <> · بعض الأسعار لاحقاً</>}
+            {totalWeight > 0 && <small> · الوزن {formatWeight(totalWeight)}</small>}
+            {priced.length < pieces.length && <small> · بعض الأسعار تُحدَّد لاحقاً</small>}
           </span>
           <b>{priced.length ? formatMoney(total) : "لاحقاً"}</b>
         </div>
-
-        {/* رمز متابعة لكل قطعة — الزبون يمسح رمز القطعة التي يسأل عنها. */}
-        <div className="a5-qrs">
-          {pieces.map(({ ticket: t, qr }, i) => (
-            <div key={t.id} className="a5-qr-item">
-              <div className="a5-frame"><div className="a5-qr a5-qr-sm" dangerouslySetInnerHTML={{ __html: qr }} /></div>
-              <span className="a5-caption a5-qr-num" dir="ltr">{t.ticket_number} · {i + 1}</span>
-            </div>
-          ))}
-        </div>
-        <p className="a5-caption text-center">امسح رمز القطعة لمتابعة حالتها</p>
-      </div>
-
-      <div className="a5-signs">
-        <div>توقيع الموظف</div>
-        <div>توقيع الزبون</div>
       </div>
 
       <footer className="a5-foot">

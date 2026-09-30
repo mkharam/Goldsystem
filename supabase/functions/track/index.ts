@@ -2,7 +2,7 @@
 //
 // لا نمنح anon أي وصول للجداول، فالقراءة تمرّ من هنا بمفتاح الخدمة وتُرجع الحد
 // الأدنى الذي يخصّ الزبون: الحالة والتواريخ واسم القطعة. لا أسعار ولا هواتف ولا
-// بيانات موظفين، ولا شيء عن تذاكر أخرى.
+// بيانات موظفين. التذاكر الأخرى الوحيدة الظاهرة هي قطع نفس الزيارة (راجع siblings).
 //
 // الرمز عشوائي 128 بت وهو كل ما يحمي التذكرة، لذا لا نكشف به إلا ما يراه صاحبها.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
@@ -59,7 +59,7 @@ Deno.serve(async (req) => {
 
   const { data: ticket, error } = await admin
     .from("repair_tickets")
-    .select("id, ticket_number, item_name, status, received_at, promised_at, ready_at, delivered_at, branch:branches(name, phone)")
+    .select("id, customer_id, ticket_number, item_name, status, received_at, promised_at, ready_at, delivered_at, branch:branches(name, phone)")
     .eq("tracking_token", token)
     .maybeSingle();
 
@@ -90,6 +90,24 @@ Deno.serve(async (req) => {
     photoUrls = (signed ?? []).map((s) => s.signedUrl).filter((u): u is string => !!u);
   }
 
+  // قطع نفس الزيارة: الإيصال المجمّع يحمل رمزاً واحداً، فتعرض الصفحة بقية القطع معه —
+  // حامل الإيصال يملكها كلها أصلاً. «نفس الزيارة» = نفس الزبون، مستلمة خلال 10 دقائق.
+  const at = new Date(ticket.received_at).getTime();
+  const { data: siblingRows } = await admin
+    .from("repair_tickets")
+    .select("ticket_number, item_name, status, tracking_token")
+    .eq("customer_id", ticket.customer_id)
+    .neq("id", ticket.id)
+    .gte("received_at", new Date(at - 10 * 60_000).toISOString())
+    .lte("received_at", new Date(at + 10 * 60_000).toISOString())
+    .order("ticket_number");
+  const siblings = (siblingRows ?? []).map((s) => ({
+    ticket_number: s.ticket_number,
+    item_name: s.item_name,
+    status: s.status,
+    token: s.tracking_token,
+  }));
+
   const { data: settings } = await admin
     .from("settings")
     .select("key, value")
@@ -110,6 +128,7 @@ Deno.serve(async (req) => {
       branch_phone: (ticket as any).branch?.phone ?? null,
     },
     photos: photoUrls,
+    siblings,
     feedback: fb ? { rating: fb.rating, comment: fb.comment } : null,
     shop_name: shop.shop_name ?? "مجوهرات",
     receipt_footer: shop.receipt_footer ?? "",
