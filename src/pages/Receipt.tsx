@@ -89,7 +89,6 @@ function ReceiptSheet({ id, settings }: { id: string; settings: Settings }) {
       <div className="a5-medal">
         <small>رقم الإيصال</small>
         <b dir="ltr">{ticket.ticket_number}</b>
-        <span>{formatDateTime(ticket.received_at)}</span>
       </div>
 
       <div className="a5-body">
@@ -99,12 +98,13 @@ function ReceiptSheet({ id, settings }: { id: string; settings: Settings }) {
           <p className="a5-title">بيانات القطعة</p>
           <dl className="a5-details">
             <Row label="الزبون" value={ticket.customer?.full_name ?? "—"} />
-            <Row label="الهاتف" value={ticket.customer?.phone ?? "—"} ltr />
             <Row label="القطعة" value={ticket.item_name} />
             {ticket.karat && <Row label="العيار" value={ticket.karat} />}
             {ticket.weight_in_grams !== null && <Row label="الوزن" value={formatWeight(ticket.weight_in_grams)} />}
             <Row label="العطل" value={ticket.problem_description} clamp />
-            {ticket.promised_at && <Row label="موعد التسليم" value={formatDateTime(ticket.promised_at)} />}
+            {/* تاريخ الاستلام لا موعد الجاهزية: الموعد تقديري، وطباعته تجعل الزبون يأتي
+                فيه ولو لم تجهز القطعة. الموعد التقديري وحالة القطعة في صفحة المتابعة (QR). */}
+            <Row label="تاريخ الاستلام" value={formatDateTime(ticket.received_at)} />
             {ticket.branch?.name && <Row label="الفرع" value={ticket.branch.name} />}
           </dl>
           {ticket.estimated_cost !== null && (
@@ -193,7 +193,6 @@ function CombinedSheet({ ids, settings }: { ids: string[]; settings: Settings })
       <div className="a5-medal">
         <small>{pieces.length} قطع</small>
         <b dir="ltr">{first.ticket_number}</b>
-        <span>{formatDateTime(first.received_at)}</span>
       </div>
 
       <div className="a5-body">
@@ -203,8 +202,7 @@ function CombinedSheet({ ids, settings }: { ids: string[]; settings: Settings })
           <p className="a5-title">بيانات الزبون</p>
           <dl className="a5-details">
             <Row label="الاسم" value={first.customer?.full_name ?? "—"} />
-            <Row label="الهاتف" value={first.customer?.phone ?? "—"} ltr />
-            {first.promised_at && <Row label="موعد التسليم" value={formatDateTime(first.promised_at)} />}
+            <Row label="تاريخ الاستلام" value={formatDateTime(first.received_at)} />
             {first.branch?.name && <Row label="الفرع" value={first.branch.name} />}
           </dl>
         </div>
