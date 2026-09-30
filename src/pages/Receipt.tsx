@@ -164,7 +164,7 @@ function CombinedSheet({ ids, settings }: { ids: string[]; settings: Settings })
       const urls = await signedPhotoUrls(valid.map((x) => x.path).filter((p): p is string => !!p));
       const out = valid.map(({ ticket, path }) => ({ ticket, photo: path ? urls[path] ?? null : null }));
       // بترتيب رقم التذكرة — نفس ترتيب إدخالها.
-      out.sort((a, b) => a.ticket.ticket_number.localeCompare(b.ticket.ticket_number));
+      out.sort((a, b) => a.ticket.ticket_number.localeCompare(b.ticket.ticket_number, undefined, { numeric: true }));
       setPieces(out);
       if (out[0]) setQr(await qrSvg(trackingUrl(out[0].ticket.tracking_token), 150));
     })();
