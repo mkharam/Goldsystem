@@ -6,6 +6,7 @@ import Dashboard from "@/pages/Dashboard";
 import NewTicket from "@/pages/NewTicket";
 import TicketDetail from "@/pages/TicketDetail";
 import Receipt from "@/pages/Receipt";
+import Calendar from "@/pages/Calendar";
 import Track from "@/pages/Track";
 
 function Protected({ children }: { children: React.ReactNode }) {
@@ -40,6 +41,7 @@ export default function App() {
           <Route path="/tickets/:id" element={<Protected><TicketDetail /></Protected>} />
           <Route path="/tickets/:id/receipt" element={<Protected><Receipt /></Protected>} />
           <Route path="/receipts" element={<Protected><Receipt /></Protected>} />
+          <Route path="/calendar" element={<Protected><Calendar /></Protected>} />
 
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

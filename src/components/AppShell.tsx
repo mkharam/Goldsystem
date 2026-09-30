@@ -12,6 +12,15 @@ function HomeIcon({ active }: { active: boolean }) {
   );
 }
 
+function CalendarIcon({ active }: { active: boolean }) {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" strokeWidth={active ? 2.4 : 2}>
+      <rect x="4" y="5.5" width="16" height="14.5" rx="2.5" stroke="currentColor" />
+      <path d="M4 10h16M8.5 3.5v4M15.5 3.5v4" stroke="currentColor" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 function PlusIcon() {
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" strokeWidth={2.6}>
@@ -32,6 +41,7 @@ export function AppShell({
 
   const onHome = pathname === "/";
   const onNew = pathname === "/tickets/new";
+  const onCalendar = pathname === "/calendar";
 
   return (
     <div className="min-h-dvh pb-24">
@@ -73,8 +83,8 @@ export function AppShell({
         className="fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white/90 backdrop-blur-lg"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
-        {/* التطبيق صفحتان فقط: الرئيسية (فيها كل التذاكر والبحث) واستلام قطعة. */}
-        <div className="mx-auto grid max-w-3xl grid-cols-2 items-center gap-3 px-4 py-2">
+        {/* ثلاث صفحات: الرئيسية (كل التذاكر والبحث)، التقويم، واستلام قطعة. */}
+        <div className="mx-auto grid max-w-3xl grid-cols-3 items-center gap-2 px-3 py-2">
           <Link
             to="/"
             className={`flex items-center justify-center gap-2 rounded-xl py-3 transition active:scale-95 ${
@@ -83,6 +93,16 @@ export function AppShell({
           >
             <HomeIcon active={onHome} />
             <span className={`text-sm ${onHome ? "font-bold" : "font-medium"}`}>الرئيسية</span>
+          </Link>
+
+          <Link
+            to="/calendar"
+            className={`flex items-center justify-center gap-2 rounded-xl py-3 transition active:scale-95 ${
+              onCalendar ? "bg-brand-50 text-brand-700" : "text-slate-500"
+            }`}
+          >
+            <CalendarIcon active={onCalendar} />
+            <span className={`text-sm ${onCalendar ? "font-bold" : "font-medium"}`}>التقويم</span>
           </Link>
 
           {/* زر الاستلام بالذهبي — أكثر إجراء يتكرّر في اليوم. */}
