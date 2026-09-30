@@ -12,19 +12,9 @@ function HomeIcon({ active }: { active: boolean }) {
   );
 }
 
-function TicketsIcon({ active }: { active: boolean }) {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" strokeWidth={active ? 2.4 : 2}>
-      <path d="M4 8a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v1.5a1.5 1.5 0 0 0 0 3V15a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2.5a1.5 1.5 0 0 0 0-3V8Z"
-        stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M10 6.5v11" stroke="currentColor" strokeLinecap="round" strokeDasharray="2.2 2.2" />
-    </svg>
-  );
-}
-
 function PlusIcon() {
   return (
-    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" strokeWidth={2.6}>
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" strokeWidth={2.6}>
       <path d="M12 5v14M5 12h14" stroke="currentColor" strokeLinecap="round" />
     </svg>
   );
@@ -41,7 +31,6 @@ export function AppShell({
   const { pathname } = useLocation();
 
   const onHome = pathname === "/";
-  const onTickets = pathname.startsWith("/tickets") && pathname !== "/tickets/new";
   const onNew = pathname === "/tickets/new";
 
   return (
@@ -84,41 +73,27 @@ export function AppShell({
         className="fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white/90 backdrop-blur-lg"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
-        <div className="mx-auto grid max-w-3xl grid-cols-3 items-end px-2">
+        {/* التطبيق صفحتان فقط: الرئيسية (فيها كل التذاكر والبحث) واستلام قطعة. */}
+        <div className="mx-auto grid max-w-3xl grid-cols-2 items-center gap-3 px-4 py-2">
           <Link
             to="/"
-            className={`flex flex-col items-center gap-1 py-2.5 transition active:scale-95 ${
-              onHome ? "text-brand-700" : "text-slate-400"
+            className={`flex items-center justify-center gap-2 rounded-xl py-3 transition active:scale-95 ${
+              onHome ? "bg-brand-50 text-brand-700" : "text-slate-500"
             }`}
           >
             <HomeIcon active={onHome} />
-            <span className={`text-[11px] ${onHome ? "font-bold" : "font-medium"}`}>الرئيسية</span>
+            <span className={`text-sm ${onHome ? "font-bold" : "font-medium"}`}>الرئيسية</span>
           </Link>
 
-          {/* زر الاستلام مرفوع فوق الشريط ومميّز بالذهبي — أكثر إجراء يتكرّر
-              في اليوم، فلا يُعامل كتبويب عادي بين اثنين آخرين. */}
-          <Link to="/tickets/new" className="flex flex-col items-center">
-            <span
-              className={`-mt-6 flex h-14 w-14 items-center justify-center rounded-full text-white shadow-lg
-                          ring-4 ring-white transition active:scale-90 ${
-                            onNew ? "bg-brand-700" : "bg-gold-600"
-                          }`}
-            >
-              <PlusIcon />
-            </span>
-            <span className={`mt-1 text-[11px] ${onNew ? "font-bold text-brand-700" : "font-medium text-slate-500"}`}>
-              استلام قطعة
-            </span>
-          </Link>
-
+          {/* زر الاستلام بالذهبي — أكثر إجراء يتكرّر في اليوم. */}
           <Link
-            to="/tickets"
-            className={`flex flex-col items-center gap-1 py-2.5 transition active:scale-95 ${
-              onTickets ? "text-brand-700" : "text-slate-400"
+            to="/tickets/new"
+            className={`flex items-center justify-center gap-1.5 rounded-xl py-3 text-white shadow-md transition active:scale-95 ${
+              onNew ? "bg-brand-700" : "bg-gold-600"
             }`}
           >
-            <TicketsIcon active={onTickets} />
-            <span className={`text-[11px] ${onTickets ? "font-bold" : "font-medium"}`}>التذاكر</span>
+            <PlusIcon />
+            <span className="text-sm font-bold">استلام قطعة</span>
           </Link>
         </div>
       </nav>

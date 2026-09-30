@@ -136,7 +136,6 @@ function ReceiptSheet({ id, settings }: { id: string; settings: Settings }) {
 
       <footer className="a5-foot">
         <p>{settings.receipt_footer}</p>
-        {ticket.branch?.phone && <p dir="ltr">{ticket.branch.phone}</p>}
       </footer>
     </div>
     </div>
@@ -250,7 +249,6 @@ function CombinedSheet({ ids, settings }: { ids: string[]; settings: Settings })
 
       <footer className="a5-foot">
         <p>{settings.receipt_footer}</p>
-        {first.branch?.phone && <p dir="ltr">{first.branch.phone}</p>}
       </footer>
     </div>
     </div>

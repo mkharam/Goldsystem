@@ -3,7 +3,6 @@ import { AuthProvider, useAuth } from "@/lib/auth";
 import { ToastProvider } from "@/lib/toast";
 import Login from "@/pages/Login";
 import Dashboard from "@/pages/Dashboard";
-import Tickets from "@/pages/Tickets";
 import NewTicket from "@/pages/NewTicket";
 import TicketDetail from "@/pages/TicketDetail";
 import Receipt from "@/pages/Receipt";
@@ -35,7 +34,8 @@ export default function App() {
           <Route path="/track/:token" element={<Track />} />
 
           <Route path="/" element={<Protected><Dashboard /></Protected>} />
-          <Route path="/tickets" element={<Protected><Tickets /></Protected>} />
+          {/* صفحة التذاكر أُلغيت — الرئيسية فيها كل التذاكر والبحث. الروابط القديمة تذهب إليها. */}
+          <Route path="/tickets" element={<Navigate to="/" replace />} />
           <Route path="/tickets/new" element={<Protected><NewTicket /></Protected>} />
           <Route path="/tickets/:id" element={<Protected><TicketDetail /></Protected>} />
           <Route path="/tickets/:id/receipt" element={<Protected><Receipt /></Protected>} />
