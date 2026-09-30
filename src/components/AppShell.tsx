@@ -44,7 +44,7 @@ export function AppShell({
   const onCalendar = pathname === "/calendar";
 
   return (
-    <div className="min-h-dvh pb-24">
+    <div className="min-h-dvh pb-32">
       <header className="brand-surface sticky top-0 z-20 text-white shadow-md">
         <div className="mx-auto flex max-w-3xl items-center justify-between gap-3 px-4 py-2.5">
           <div className="flex min-w-0 items-center gap-2.5">
@@ -79,16 +79,19 @@ export function AppShell({
         {children}
       </main>
 
+      {/* شريط داكن فاخر (أخضر عميق بخيط ذهبي). مرفوع فوق شريط الآيفون السفلي: هامش أدنى
+          ثابت حتى حين لا يعطينا المتصفح مقدار المنطقة الآمنة (env يساوي صفراً بدون viewport-fit). */}
       <nav
-        className="fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white/90 backdrop-blur-lg"
-        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+        className="fixed inset-x-0 bottom-0 z-20 border-t border-gold-500/30 bg-gradient-to-b from-brand-900/95 to-brand-950/95 shadow-[0_-8px_24px_-12px_rgba(0,0,0,0.6)] backdrop-blur-lg"
+        style={{ paddingBottom: "max(env(safe-area-inset-bottom), 22px)" }}
       >
+        <div className="brand-hairline" />
         {/* ثلاث صفحات: الرئيسية (كل التذاكر والبحث)، التقويم، واستلام قطعة. */}
-        <div className="mx-auto grid max-w-3xl grid-cols-3 items-center gap-2 px-3 py-2">
+        <div className="mx-auto grid max-w-3xl grid-cols-3 items-center gap-2 px-3 pb-1 pt-2.5">
           <Link
             to="/"
             className={`flex items-center justify-center gap-2 rounded-xl py-3 transition active:scale-95 ${
-              onHome ? "bg-brand-50 text-brand-700" : "text-slate-500"
+              onHome ? "bg-white/10 text-gold-200 ring-1 ring-gold-500/40" : "text-gold-100/55"
             }`}
           >
             <HomeIcon active={onHome} />
@@ -98,7 +101,7 @@ export function AppShell({
           <Link
             to="/calendar"
             className={`flex items-center justify-center gap-2 rounded-xl py-3 transition active:scale-95 ${
-              onCalendar ? "bg-brand-50 text-brand-700" : "text-slate-500"
+              onCalendar ? "bg-white/10 text-gold-200 ring-1 ring-gold-500/40" : "text-gold-100/55"
             }`}
           >
             <CalendarIcon active={onCalendar} />
@@ -108,12 +111,14 @@ export function AppShell({
           {/* زر الاستلام بالذهبي — أكثر إجراء يتكرّر في اليوم. */}
           <Link
             to="/tickets/new"
-            className={`flex items-center justify-center gap-1.5 rounded-xl py-3 text-white shadow-md transition active:scale-95 ${
-              onNew ? "bg-brand-700" : "bg-gold-600"
+            className={`flex items-center justify-center gap-1.5 rounded-xl py-3 font-bold shadow-[0_6px_18px_-6px_rgba(201,162,74,0.7)] transition active:scale-95 ${
+              onNew
+                ? "bg-gold-100 text-brand-900 ring-2 ring-gold-400"
+                : "bg-gradient-to-l from-gold-600 via-gold-400 to-gold-600 text-brand-950"
             }`}
           >
             <PlusIcon />
-            <span className="text-sm font-bold">استلام قطعة</span>
+            <span className="text-sm">استلام قطعة</span>
           </Link>
         </div>
       </nav>
