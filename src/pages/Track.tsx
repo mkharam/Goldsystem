@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { FUNCTIONS_URL } from "@/lib/supabase";
 import { REPAIR_STATUS, OPEN_STATUSES } from "@/lib/constants";
-import { formatDate, formatDateTime } from "@/lib/format";
+import { formatDate } from "@/lib/format";
 import { Logo } from "@/components/Logo";
 import type { RepairStatus } from "@/lib/types";
 
@@ -257,10 +257,29 @@ export default function Track() {
             </ol>
           )}
 
-          {OPEN_STATUSES.includes(ticket.status) && ticket.promised_at && ticket.status !== "ready" && (
-            <p className="mt-5 text-center text-sm text-slate-600">
-              الموعد المتوقّع للتسليم: {formatDateTime(ticket.promised_at)}
-            </p>
+          {/* الموعد تقديري دائماً — لا نعِد به. وإن فات ولم تجهز القطعة نقول ذلك صراحةً
+              حتى لا يأتي الزبون على الموعد ويجدها غير جاهزة: ينتظر رسالة الجاهزية. */}
+          {OPEN_STATUSES.includes(ticket.status) && ticket.status !== "ready" && (
+            ticket.promised_at && new Date(ticket.promised_at).getTime() < Date.now() ? (
+              <div className="mt-5 rounded-xl border border-gold-300 bg-gold-50 px-4 py-3 text-center">
+                <p className="font-semibold text-brand-800">قطعتك تحتاج وقتاً إضافياً قليلاً</p>
+                <p className="mt-1 text-sm text-slate-600">
+                  لم تجهز بعد — نرجو عدم الحضور قبل أن تصلك رسالة واتساب بجاهزيتها،
+                  أو تظهر هنا «جاهزة للتسليم».
+                </p>
+              </div>
+            ) : (
+              <div className="mt-5 rounded-xl bg-slate-50 px-4 py-3 text-center">
+                {ticket.promised_at && (
+                  <p className="text-sm text-slate-700">
+                    الموعد التقريبي للجاهزية: <span className="font-semibold">{formatDate(ticket.promised_at)}</span>
+                  </p>
+                )}
+                <p className="mt-1 text-xs text-slate-500">
+                  {ticket.promised_at ? "الموعد تقديري — " : ""}سنبلغك عبر واتساب فور جهوز القطعة، وتظهر هنا «جاهزة للتسليم».
+                </p>
+              </div>
+            )
           )}
 
           {data.photos.length > 0 && (
