@@ -1233,3 +1233,120 @@
   transition: transform 0.15s;
 }
 .trk-home-btn:active { transform: scale(0.95); }
+
+/* ============ الوضع الداكن — ألوان الشعار: حرير زمرّدي، ذهب، وكريمي ============
+   يُطبَّق على التطبيق (‎.theme-dark‎ على غلاف AppShell وصفحة الدخول) لا على الإيصال ولا
+   على صفحة متابعة الزبون. نعيد تعريف ألوان Tailwind الشائعة داخله بدل إضافة dark: لكل
+   عنصر — فأي شاشة جديدة تصبح داكنة تلقائياً. */
+html.app-dark body {
+  background: #06150f;
+  color: #f5e9cf;
+}
+
+.theme-dark {
+  --dk-text: #f5e9cf;
+  --dk-gold: #e1bb76;
+  --dk-line: rgb(217 182 106 / 0.2);
+  color: var(--dk-text);
+  background:
+    radial-gradient(120% 60% at 50% 0%, rgb(26 91 65 / 0.35), transparent 60%),
+    radial-gradient(80% 50% at 100% 100%, rgb(201 162 74 / 0.08), transparent 70%),
+    #06150f;
+  background-attachment: fixed;
+}
+
+/* المكوّنات */
+.theme-dark .card {
+  background: linear-gradient(160deg, rgb(22 66 48 / 0.55), rgb(10 35 24 / 0.7));
+  border-color: var(--dk-line);
+  box-shadow: 0 10px 28px -16px rgb(0 0 0 / 0.7), inset 0 1px 0 rgb(255 255 255 / 0.04);
+}
+.theme-dark .label { color: rgb(245 233 207 / 0.8); }
+.theme-dark .field {
+  background: rgb(255 255 255 / 0.04);
+  border-color: rgb(217 182 106 / 0.28);
+  color: var(--dk-text);
+}
+.theme-dark .field::placeholder { color: rgb(245 233 207 / 0.35); }
+.theme-dark .field:focus { border-color: #d9b66a; box-shadow: 0 0 0 3px rgb(217 182 106 / 0.18); }
+.theme-dark .field:disabled { background: rgb(255 255 255 / 0.02); color: rgb(245 233 207 / 0.4); }
+.theme-dark select.field option { background: #0a2318; color: var(--dk-text); }
+.theme-dark .btn-primary {
+  color: #06150f;
+  background: linear-gradient(100deg, #c9a24a, #e1bb76 50%, #c9a24a);
+  box-shadow: 0 8px 22px -10px rgb(201 162 74 / 0.8);
+}
+.theme-dark .btn-ghost {
+  background: transparent;
+  border-color: rgb(217 182 106 / 0.35);
+  color: #f5e9cf;
+}
+.theme-dark .btn-ghost:hover { background: rgb(255 255 255 / 0.06); }
+
+/* الأسطح */
+.theme-dark .bg-white { background-color: rgb(255 255 255 / 0.05); }
+.theme-dark .bg-slate-50,
+.theme-dark .bg-slate-50\/95 { background-color: rgb(255 255 255 / 0.035); }
+.theme-dark .sticky.bg-slate-50\/95 { background-color: rgb(6 21 15 / 0.92); }
+.theme-dark .bg-slate-100 { background-color: rgb(255 255 255 / 0.07); }
+.theme-dark .bg-slate-200,
+.theme-dark .bg-slate-200\/70 { background-color: rgb(255 255 255 / 0.1); }
+.theme-dark .hover\:bg-slate-50:hover,
+.theme-dark .hover\:bg-slate-100:hover { background-color: rgb(255 255 255 / 0.07); }
+.theme-dark .hover\:bg-brand-50:hover { background-color: rgb(90 163 132 / 0.15); }
+
+/* النصوص */
+.theme-dark .text-slate-900,
+.theme-dark .text-slate-800 { color: var(--dk-text); }
+.theme-dark .text-slate-700 { color: rgb(245 233 207 / 0.86); }
+.theme-dark .text-slate-600 { color: rgb(245 233 207 / 0.72); }
+.theme-dark .text-slate-500 { color: rgb(245 233 207 / 0.58); }
+.theme-dark .text-slate-400 { color: rgb(245 233 207 / 0.44); }
+.theme-dark .text-slate-300 { color: rgb(245 233 207 / 0.3); }
+
+/* الحدود */
+.theme-dark .border-slate-100 { border-color: rgb(217 182 106 / 0.12); }
+.theme-dark .border-slate-200 { border-color: var(--dk-line); }
+.theme-dark .border-slate-300 { border-color: rgb(217 182 106 / 0.3); }
+.theme-dark .divide-slate-100 > * + * { border-color: rgb(217 182 106 / 0.12); }
+
+/* لمسات الهوية: ذهب وزمرّد يتوهّجان على الداكن بدل خلفيات فاتحة باهتة */
+.theme-dark .bg-gold-50 { background-color: rgb(217 182 106 / 0.1); }
+.theme-dark .bg-gold-100 { background-color: rgb(217 182 106 / 0.18); }
+.theme-dark .text-gold-700,
+.theme-dark .text-gold-800 { color: var(--dk-gold); }
+.theme-dark .border-gold-200 { border-color: rgb(217 182 106 / 0.35); }
+.theme-dark .border-gold-300,
+.theme-dark .border-gold-300\/70 { border-color: rgb(217 182 106 / 0.45); }
+.theme-dark .from-gold-50 { --tw-gradient-from: rgb(217 182 106 / 0.14) var(--tw-gradient-from-position); --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to); }
+.theme-dark .to-white { --tw-gradient-to: rgb(255 255 255 / 0.02) var(--tw-gradient-to-position); }
+
+.theme-dark .bg-brand-50 { background-color: rgb(90 163 132 / 0.14); }
+.theme-dark .bg-brand-100 { background-color: rgb(90 163 132 / 0.2); }
+.theme-dark .text-brand-700,
+.theme-dark .text-brand-800,
+.theme-dark .text-brand-900 { color: #9bc8b1; }
+.theme-dark .border-brand-100,
+.theme-dark .border-brand-200 { border-color: rgb(90 163 132 / 0.35); }
+.theme-dark .border-brand-300,
+.theme-dark .border-brand-400 { border-color: rgb(90 163 132 / 0.5); }
+/* الأزرار المختارة (خلفية زمرّدية) تبقى نصاً ذهبياً فاتحاً */
+.theme-dark .bg-brand-700 { background-color: #1a5b41; }
+.theme-dark .bg-brand-700.text-white,
+.theme-dark .bg-brand-600.text-white { color: #fff6df; }
+
+.theme-dark .bg-red-50,
+.theme-dark .bg-red-50\/40 { background-color: rgb(248 113 113 / 0.1); }
+.theme-dark .bg-red-100 { background-color: rgb(248 113 113 / 0.16); }
+.theme-dark .text-red-600,
+.theme-dark .text-red-700,
+.theme-dark .text-red-800 { color: #fca5a5; }
+.theme-dark .border-red-200 { border-color: rgb(248 113 113 / 0.35); }
+
+.theme-dark .bg-blue-100 { background-color: rgb(96 165 250 / 0.16); }
+.theme-dark .text-blue-700,
+.theme-dark .text-blue-800 { color: #93c5fd; }
+.theme-dark .border-blue-200 { border-color: rgb(96 165 250 / 0.35); }
+
+/* هياكل التحميل */
+.theme-dark .animate-pulse.bg-slate-100 { background: rgb(255 255 255 / 0.06); }

@@ -3,6 +3,7 @@ import { Navigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { supabase, FUNCTIONS_URL } from "@/lib/supabase";
 import { Logo } from "@/components/Logo";
+import { getTheme } from "@/lib/theme";
 
 export default function Login() {
   const { staff, loading, signIn } = useAuth();
@@ -58,7 +59,7 @@ export default function Login() {
   }
 
   return (
-    <div className="brand-surface flex min-h-dvh items-center justify-center px-4 py-8">
+    <div className={`brand-surface flex min-h-dvh items-center justify-center px-4 py-8 ${getTheme() === "dark" ? "theme-dark" : ""}`}>
       <div className="w-full max-w-sm rounded-2xl border border-gold-600/25 bg-white p-6 shadow-2xl">
         <div className="mb-6 text-center">
           <Logo size={88} className="mx-auto mb-4 shadow-lg" />
