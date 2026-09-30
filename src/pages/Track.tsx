@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { FUNCTIONS_URL } from "@/lib/supabase";
 import { REPAIR_STATUS, OPEN_STATUSES } from "@/lib/constants";
 import { formatDate, formatDateTime } from "@/lib/format";
@@ -22,6 +22,8 @@ type TrackData = {
     branch_phone: string | null;
   };
   photos: string[];
+  /** بقية قطع نفس الزيارة (إيصال مجمّع). */
+  siblings?: { ticket_number: string; item_name: string; status: RepairStatus; token: string }[];
   feedback: { rating: number; comment: string | null } | null;
   shop_name: string;
   receipt_footer: string;
@@ -267,6 +269,24 @@ export default function Track() {
                 {data.photos.map((src, i) => (
                   <img key={i} src={src} alt="صورة القطعة"
                     className="aspect-square w-full rounded-lg border border-slate-200 object-cover" />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {(data.siblings?.length ?? 0) > 0 && (
+            <div className="mt-5 border-t border-slate-100 pt-4">
+              <p className="mb-2 text-sm font-semibold text-slate-700">بقية قطعك في نفس الإيصال</p>
+              <div className="space-y-2">
+                {data.siblings!.map((s) => (
+                  <Link key={s.token} to={`/track/${s.token}`}
+                    className="flex items-center justify-between gap-3 rounded-xl border border-gold-200 bg-gold-50/60 px-3 py-2.5 transition hover:border-gold-400">
+                    <span className="min-w-0">
+                      <span className="block truncate font-medium text-slate-800">{s.item_name}</span>
+                      <span className="block font-mono text-xs text-slate-500">{s.ticket_number}</span>
+                    </span>
+                    <span className={`badge shrink-0 ${REPAIR_STATUS[s.status].className}`}>{REPAIR_STATUS[s.status].label}</span>
+                  </Link>
                 ))}
               </div>
             </div>
