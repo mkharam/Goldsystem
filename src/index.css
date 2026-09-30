@@ -202,6 +202,14 @@
     page-break-after: avoid;
   }
 
+  /* الإيصال المجمّع قد يطول مع قطع كثيرة: يُسمح له بصفحة ثانية، دون قطع صف قطعة في المنتصف. */
+  .a5-multi {
+    break-inside: auto;
+  }
+  .a5-table tr {
+    break-inside: avoid;
+  }
+
   /* التدرّجات اللونية تُطبع مشوّهة في سفاري آيفون (دائرة ذهبية كبيرة) — ألوان صريحة. */
   .a5-band,
   .a5-foot {
@@ -507,4 +515,165 @@
   margin-top: calc(0.4 * var(--u));
   font-size: calc(2.29 * var(--u));
   color: theme("colors.gold.400");
+}
+
+/* ——— الإيصال المجمّع لعدة قطع ——— */
+.a5-multi {
+  max-height: none;
+}
+
+.a5-body-multi {
+  display: block;
+}
+
+.a5-grid2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  column-gap: calc(5 * var(--u));
+  margin-bottom: calc(3 * var(--u));
+}
+
+.a5-table {
+  position: relative;
+  width: 100%;
+  border-collapse: collapse;
+  font-size: calc(2.82 * var(--u));
+}
+.a5-table th {
+  font-weight: 600;
+  font-size: calc(2.47 * var(--u));
+  color: theme("colors.gold.800");
+  text-align: right;
+  padding: calc(0.8 * var(--u)) calc(1 * var(--u));
+  border-bottom: calc(0.3 * var(--u)) solid theme("colors.gold.400");
+}
+.a5-table td {
+  vertical-align: top;
+  padding: calc(1.2 * var(--u)) calc(1 * var(--u));
+  border-bottom: calc(0.2 * var(--u)) dashed theme("colors.gold.200");
+}
+.a5-table b {
+  display: block;
+  font-weight: 700;
+}
+.a5-sub {
+  display: block;
+  font-size: calc(2.3 * var(--u));
+  color: theme("colors.slate.500");
+}
+.a5-num {
+  font-weight: 700;
+  color: theme("colors.gold.700");
+  text-align: center;
+}
+.a5-cost {
+  font-weight: 700;
+  white-space: nowrap;
+  color: theme("colors.brand.800");
+}
+.a5-thumb {
+  display: block;
+  width: calc(11 * var(--u));
+  height: calc(11 * var(--u));
+  border-radius: calc(1 * var(--u));
+  border: calc(0.25 * var(--u)) solid theme("colors.gold.300");
+  object-fit: cover;
+  background: #fff;
+}
+.a5-thumb-empty {
+  background: theme("colors.gold.50");
+}
+
+.a5-qrs {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: calc(2.5 * var(--u));
+  margin-top: calc(3 * var(--u));
+}
+.a5-qr-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(0.6 * var(--u));
+  width: calc(19 * var(--u));
+}
+.a5-qr-item .a5-caption {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.a5-qr-sm svg {
+  width: calc(15 * var(--u)) !important;
+  height: calc(15 * var(--u)) !important;
+}
+
+/* المجمّع أكثف: شريط أقصر ورموز أصغر حتى تتسع 4-5 قطع في صفحة واحدة. */
+.a5-multi .a5-band {
+  padding: calc(3 * var(--u)) calc(6 * var(--u)) calc(6.5 * var(--u));
+}
+.a5-multi .a5-band .a5-logo {
+  width: calc(10 * var(--u)) !important;
+  height: calc(10 * var(--u)) !important;
+  margin-bottom: calc(1 * var(--u));
+}
+.a5-multi .a5-shop {
+  font-size: calc(6 * var(--u));
+}
+.a5-multi .a5-medal b {
+  font-family: "Cairo", sans-serif;
+  letter-spacing: 0;
+  font-size: calc(4.6 * var(--u));
+}
+.a5-multi .a5-body {
+  padding-top: calc(3 * var(--u));
+}
+.a5-multi .a5-grid2 {
+  margin-bottom: calc(1.5 * var(--u));
+}
+.a5-multi .a5-title {
+  margin-bottom: 0;
+}
+.a5-multi .a5-table td {
+  padding-top: calc(0.9 * var(--u));
+  padding-bottom: calc(0.9 * var(--u));
+}
+.a5-multi .a5-thumb {
+  width: calc(9 * var(--u));
+  height: calc(9 * var(--u));
+}
+.a5-multi .a5-price {
+  margin-top: calc(1.5 * var(--u));
+  padding-top: calc(0.8 * var(--u));
+  padding-bottom: calc(0.8 * var(--u));
+}
+.a5-multi .a5-qrs {
+  margin-top: calc(2 * var(--u));
+  gap: calc(2 * var(--u));
+}
+.a5-multi .a5-qr-item {
+  width: calc(15 * var(--u));
+}
+.a5-multi .a5-qr-sm svg {
+  width: calc(11 * var(--u)) !important;
+  height: calc(11 * var(--u)) !important;
+}
+.a5-multi .a5-signs {
+  padding-top: calc(1 * var(--u));
+  padding-bottom: calc(2 * var(--u));
+}
+.a5-multi .a5-signs div {
+  margin-top: calc(3 * var(--u));
+}
+.a5-col-item {
+  width: 34%;
+}
+.a5-multi .a5-qr-item {
+  width: calc(19 * var(--u));
+}
+.a5-qr-num {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: calc(2.1 * var(--u)) !important;
+  white-space: nowrap;
 }

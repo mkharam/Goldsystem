@@ -39,6 +39,7 @@ export default function App() {
           <Route path="/tickets/new" element={<Protected><NewTicket /></Protected>} />
           <Route path="/tickets/:id" element={<Protected><TicketDetail /></Protected>} />
           <Route path="/tickets/:id/receipt" element={<Protected><Receipt /></Protected>} />
+          <Route path="/receipts" element={<Protected><Receipt /></Protected>} />
 
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

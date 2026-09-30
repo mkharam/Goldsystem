@@ -14,7 +14,26 @@ import { KARAT_OPTIONS, ITEM_TYPE_OPTIONS, normalizeDigits } from "@/lib/constan
 
 type Branch = { id: string; name: string; code: string | null };
 
-const STEP_LABELS = ["الزبون", "القطعة", "العطل"];
+const STEP_LABELS = ["الزبون", "القطع", "التسليم"];
+
+/** قطعة واحدة من قطع الزبون — كل قطعة تصبح تذكرة مستقلة بحالتها وإيصالها ورمز متابعتها. */
+type Item = {
+  key: string;
+  name: string;
+  type: string;
+  karat: string;
+  weight: string;
+  problem: string;
+  cost: string;
+  files: File[];
+};
+
+const newItem = (): Item => ({
+  key: Math.random().toString(36).slice(2),
+  name: "", type: "", karat: "", weight: "", problem: "", cost: "", files: [],
+});
+
+const MAX_ITEMS = 20;
 
 function defaultPromisedAt(days: number): string {
   const date = new Date();
@@ -48,21 +67,21 @@ export default function NewTicket() {
   const [customerId, setCustomerId] = useState("");
   const [matches, setMatches] = useState<CustomerMatch[]>([]);
 
-  const [itemName, setItemName] = useState("");
-  const [itemType, setItemType] = useState("");
-  const [karat, setKarat] = useState("");
-  const [weight, setWeight] = useState("");
-  const [problem, setProblem] = useState("");
-  const [estimatedCost, setEstimatedCost] = useState("");
-
-  const [files, setFiles] = useState<File[]>([]);
-  const fileInput = useRef<HTMLInputElement>(null);
+  // زبون بأكثر من قطعة: كل قطعة ببياناتها. تبدأ بقطعة واحدة، ويزيد الموظف العدد بزر.
+  const [items, setItems] = useState<Item[]>([newItem()]);
+  const updateItem = (key: string, patch: Partial<Item>) =>
+    setItems((list) => list.map((it) => (it.key === key ? { ...it, ...patch } : it)));
+  const setCount = (n: number) =>
+    setItems((list) => {
+      const count = Math.min(MAX_ITEMS, Math.max(1, n));
+      if (count <= list.length) return list.slice(0, count);
+      return [...list, ...Array.from({ length: count - list.length }, newItem)];
+    });
 
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState("");
   const [showMore, setShowMore] = useState(false);
-  // "السعر لاحقاً": الموظف لا يعرف التكلفة بعد — يُطلب إلزامياً عند التسليم (require_price_on_delivery).
-  const [priceLater, setPriceLater] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
 
   useEffect(() => {
@@ -97,7 +116,7 @@ export default function NewTicket() {
     return () => clearTimeout(timer);
   }, [phone, customerId]);
 
-  async function uploadPhotos(ticketId: string) {
+  async function uploadPhotos(ticketId: string, files: File[]) {
     for (const file of files) {
       const ext = file.name.split(".").pop()?.toLowerCase() ?? "jpg";
       const path = `${ticketId}/intake-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
@@ -125,7 +144,14 @@ export default function NewTicket() {
       if (!normalizeDigits(phone).trim()) return setError("اكتب رقم هاتف الزبون");
       if (!customerName.trim()) return setError("اكتب اسم الزبون");
     }
-    if (step === 1 && !itemName.trim()) return setError("اكتب اسم القطعة أو وصفها");
+    if (step === 1) {
+      // الخطأ يشير للقطعة بالرقم — مع عدة قطع يجب أن يعرف الموظف أيّها ناقصة.
+      const label = (i: number) => (items.length > 1 ? ` (القطعة ${i + 1})` : "");
+      for (let i = 0; i < items.length; i++) {
+        if (!items[i].name.trim()) return setError(`اكتب اسم القطعة أو وصفها${label(i)}`);
+        if (!items[i].problem.trim()) return setError(`اكتب المطلوب عمله${label(i)}`);
+      }
+    }
     setStep((s) => s + 1);
   }
 
@@ -136,7 +162,6 @@ export default function NewTicket() {
 
   async function onSave() {
     setError(null);
-    if (!problem.trim()) return setError("اكتب وصف العطل أو العمل المطلوب");
     if (!branchId) return setError("اختر الفرع");
 
     setBusy(true);
@@ -147,28 +172,38 @@ export default function NewTicket() {
         phone: normalizeDigits(phone).trim(),
       });
 
-      const ticket = await createTicket({
-        customer_id: resolvedCustomerId,
-        branch_id: branchId,
-        received_by: staff!.staff_id,
-        item_source: "manual",
-        inventory_product_id: null,
-        item_code: null,
-        item_name: itemName.trim(),
-        item_type: itemType || null,
-        karat: karat || null,
-        weight_in_grams: weight.trim() ? Number(normalizeDigits(weight)) : null,
-        problem_description: problem.trim(),
-        estimated_cost: estimatedCost.trim() ? Number(normalizeDigits(estimatedCost)) : null,
-        promised_at: promisedAt ? new Date(promisedAt).toISOString() : null,
-      });
-
-      await uploadPhotos(ticket.id);
+      // تذكرة لكل قطعة، بالتتابع حتى تأخذ أرقاماً متتالية. ما حُفظ يبقى محفوظاً إن فشلت
+      // قطعة لاحقة — لا نعيد إنشاءه عند إعادة المحاولة.
+      const ids: string[] = [];
+      for (let i = 0; i < items.length; i++) {
+        const it = items[i];
+        if (items.length > 1) setProgress(`حفظ القطعة ${i + 1} من ${items.length}…`);
+        const ticket = await createTicket({
+          customer_id: resolvedCustomerId,
+          branch_id: branchId,
+          received_by: staff!.staff_id,
+          item_source: "manual",
+          inventory_product_id: null,
+          item_code: null,
+          item_name: it.name.trim(),
+          item_type: it.type || null,
+          karat: it.karat || null,
+          weight_in_grams: it.weight.trim() ? Number(normalizeDigits(it.weight)) : null,
+          problem_description: it.problem.trim(),
+          // فارغ = السعر لاحقاً — يُطلب إلزامياً عند التسليم (require_price_on_delivery).
+          estimated_cost: it.cost.trim() ? Number(normalizeDigits(it.cost)) : null,
+          promised_at: promisedAt ? new Date(promisedAt).toISOString() : null,
+        });
+        await uploadPhotos(ticket.id, it.files);
+        ids.push(ticket.id);
+        setItems((list) => list.filter((x) => x.key !== it.key));
+      }
       buzz([15, 60, 15]); // نبضتان: تُحسّ بوضوح كتأكيد "تم" دون أن تكون طويلة مزعجة.
-      // الإيصال فوراً بعد الاستلام — الزبون واقف ينتظره.
-      navigate(`/tickets/${ticket.id}/receipt`);
+      // الإيصال فوراً بعد الاستلام — الزبون واقف ينتظره. عدة قطع = إيصال واحد مجمّع.
+      navigate(ids.length === 1 ? `/tickets/${ids[0]}/receipt` : `/receipts?ids=${ids.join(",")}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "تعذّر حفظ التذكرة");
+      setProgress("");
       setBusy(false);
     }
   }
@@ -181,7 +216,7 @@ export default function NewTicket() {
 
   return (
     <AppShell inventoryDown={inventoryDown}>
-      <h1 className="mb-4 text-center text-lg font-bold text-slate-900">استلام قطعة</h1>
+      <h1 className="mb-4 text-center text-lg font-bold text-slate-900">{items.length > 1 ? `استلام ${items.length} قطع` : "استلام قطعة"}</h1>
 
       <Steps labels={STEP_LABELS} current={step} />
 
@@ -246,145 +281,51 @@ export default function NewTicket() {
           </div>
         )}
 
-        {/* ——— ٢ القطعة ——— */}
+        {/* ——— ٢ القطع ——— */}
+        {/* كم قطعة؟ ثم بطاقة لكل قطعة: اسمها، عيارها، وزنها، المطلوب، سعرها، وصورتها. */}
         {step === 1 && (
           <div className="space-y-4">
-            <div>
-              <label className="label text-base" htmlFor="item_name">ما هي القطعة؟</label>
-              <input
-                id="item_name"
-                autoFocus
-                className="field py-3.5 text-lg"
-                placeholder="مثال: خاتم ذهب بفص"
-                value={itemName}
-                onChange={(e) => setItemName(e.target.value)}
-              />
-            </div>
-
-            <div>
-              <label className="label text-base">العيار</label>
-              {/* أزرار بدل قائمة منسدلة: الخيارات قليلة واللمس أسرع من فتح قائمة. */}
-              <div className="grid grid-cols-4 gap-2">
-                {KARAT_OPTIONS.map((o) => (
-                  <button
-                    key={o}
-                    type="button"
-                    onClick={() => setKarat(karat === o ? "" : o)}
-                    className={`rounded-lg border py-3 text-sm font-semibold transition ${
-                      karat === o
-                        ? "border-brand-700 bg-brand-700 text-white"
-                        : "border-slate-300 bg-white text-slate-700"
-                    }`}
-                  >
-                    {o}
-                  </button>
-                ))}
+            <div className="flex items-center justify-between gap-3 rounded-xl bg-brand-50 px-3 py-2.5">
+              <span className="text-base font-bold text-brand-800">كم قطعة؟</span>
+              <div className="flex items-center gap-2">
+                <button type="button" aria-label="أقل" disabled={items.length <= 1}
+                  onClick={() => setCount(items.length - 1)}
+                  className="flex h-10 w-10 items-center justify-center rounded-full border border-brand-300 bg-white text-xl font-bold text-brand-700 disabled:opacity-40">
+                  −
+                </button>
+                <span className="w-8 text-center text-2xl font-extrabold tabular-nums text-brand-900">{items.length}</span>
+                <button type="button" aria-label="أكثر" disabled={items.length >= MAX_ITEMS}
+                  onClick={() => setCount(items.length + 1)}
+                  className="flex h-10 w-10 items-center justify-center rounded-full bg-brand-700 text-xl font-bold text-white disabled:opacity-40">
+                  +
+                </button>
               </div>
             </div>
 
-            <div>
-              <label className="label text-base" htmlFor="weight">الوزن بالغرام</label>
-              <input
-                id="weight"
-                type="text"
-                inputMode="decimal"
-                dir="ltr"
-                className="field py-3.5 text-left text-lg"
-                placeholder="0.000"
-                value={weight}
-                onChange={(e) => setWeight(normalizeDigits(e.target.value))}
+            {items.map((it, i) => (
+              <ItemCard
+                key={it.key}
+                index={i}
+                total={items.length}
+                item={it}
+                onChange={(patch) => updateItem(it.key, patch)}
+                onRemove={items.length > 1 ? () => setItems((list) => list.filter((x) => x.key !== it.key)) : undefined}
               />
-              <p className="mt-1.5 text-xs text-slate-500">
-                مهم: يُقارَن بالوزن عند التسليم للتأكد أن الذهب لم ينقص.
-              </p>
-            </div>
+            ))}
 
-            <div>
-              <label className="label text-base">صور القطعة</label>
-              <input
-                ref={fileInput}
-                type="file"
-                accept="image/*"
-                capture="environment"
-                multiple
-                className="hidden"
-                onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
-              />
-              <button
-                type="button"
-                onClick={() => fileInput.current?.click()}
-                className={`w-full rounded-lg border-2 border-dashed py-5 text-sm font-medium transition ${
-                  files.length > 0
-                    ? "border-brand-400 bg-brand-50 text-brand-700"
-                    : "border-slate-300 text-slate-500"
-                }`}
-              >
-                {files.length > 0 ? `✓ ${files.length} صورة — اضغط للتغيير` : "📷 صوّر القطعة الآن"}
+            {items.length < MAX_ITEMS && (
+              <button type="button" onClick={() => setCount(items.length + 1)}
+                className="w-full rounded-lg border-2 border-dashed border-brand-300 py-3 text-sm font-semibold text-brand-700">
+                + إضافة قطعة أخرى لنفس الزبون
               </button>
-              <p className="mt-1.5 text-xs text-slate-500">دليل حالتها قبل العمل عليها — يحميك من أي خلاف.</p>
-            </div>
+            )}
           </div>
         )}
 
-        {/* ——— ٣ العطل ——— */}
-        {/* الخطوة الأخيرة: المطلوب، ثم السعر بطاقةً رئيسية بارزة (يراه الزبون ويتفق عليه قبل أن
-            يترك قطعته)، ثم موعد التسليم خياراً خفيفاً بضغطة. الفرع والنوع — نادراً ما يتغيّران —
-            في "المزيد". */}
+        {/* ——— ٣ التسليم ——— */}
+        {/* الموعد خيار خفيف بضغطة، ثم مراجعة كل القطع قبل الحفظ. الفرع — نادراً ما يتغيّر — في "المزيد". */}
         {step === 2 && (
           <div className="space-y-5">
-            <div>
-              <label className="label text-base" htmlFor="problem">ما المطلوب عمله؟</label>
-              <textarea
-                id="problem"
-                rows={3}
-                autoFocus
-                className="field text-lg"
-                placeholder="مثال: كسر في المشبك، تلميع، تصغير مقاس"
-                value={problem}
-                onChange={(e) => setProblem(e.target.value)}
-              />
-            </div>
-
-            {/* السعر — الحقل الأساسي */}
-            <div className="overflow-hidden rounded-2xl border border-gold-300/70 bg-gradient-to-b from-gold-50 to-white shadow-sm">
-              <div className="flex items-center justify-between px-4 pt-3">
-                <label htmlFor="cost" className="text-sm font-bold text-brand-800">السعر التقريبي</label>
-                <button
-                  type="button"
-                  onClick={() => { setPriceLater((v) => !v); setEstimatedCost(""); }}
-                  className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
-                    priceLater ? "border-brand-600 bg-brand-600 text-white" : "border-slate-300 bg-white text-slate-600"
-                  }`}
-                >
-                  {priceLater ? "✓ السعر لاحقاً" : "السعر لاحقاً"}
-                </button>
-              </div>
-              {priceLater ? (
-                <p className="px-4 pb-4 pt-3 text-sm text-slate-600">
-                  يُحدَّد بعد فحص القطعة — السعر الحقيقي يُضاف إلزامياً عند استلامها جاهزة.
-                </p>
-              ) : (
-                <div className="flex items-baseline justify-center gap-2 px-4 pb-4 pt-2">
-                  <input
-                    id="cost"
-                    type="text"
-                    inputMode="decimal"
-                    dir="ltr"
-                    className="w-40 border-0 border-b-2 border-gold-400 bg-transparent py-1 text-center text-4xl font-extrabold text-brand-900 outline-none placeholder:text-slate-300 focus:border-brand-600"
-                    placeholder="0"
-                    value={estimatedCost}
-                    onChange={(e) => setEstimatedCost(normalizeDigits(e.target.value))}
-                  />
-                  <span className="text-lg font-bold text-gold-700">د.ل</span>
-                </div>
-              )}
-              {!priceLater && (
-                <p className="px-4 pb-3 -mt-1 text-center text-xs text-slate-500">
-                  تقريبي للزبون — السعر الحقيقي يُضاف عند استلام القطعة جاهزة.
-                </p>
-              )}
-            </div>
-
             {/* موعد التسليم — اختياري وخفيف */}
             <div>
               <p className="label">
@@ -433,44 +374,47 @@ export default function NewTicket() {
               )}
             </div>
 
-            {/* مراجعة سريعة قبل الحفظ: يرى ما سيُطبع على الإيصال. */}
+            {/* مراجعة سريعة قبل الحفظ: يرى ما سيُطبع على الإيصالات. */}
             <div className="rounded-xl bg-slate-50 p-3 text-sm">
-              <p className="mb-2 font-semibold text-slate-700">مراجعة</p>
+              <p className="mb-2 font-semibold text-slate-700">
+                مراجعة{items.length > 1 && <span className="font-normal text-slate-500"> — {items.length} قطع في إيصال واحد</span>}
+              </p>
               <dl className="space-y-1 text-slate-600">
                 <Line label="الزبون" value={`${customerName || "—"} · ${phone || "—"}`} />
-                <Line label="القطعة" value={[itemName || "—", karat, weight ? `${weight} غ` : ""].filter(Boolean).join(" · ")} />
-                <Line label="السعر التقريبي" value={estimatedCost ? `${estimatedCost} د.ل` : "لاحقاً — عند الاستلام جاهزة"} />
                 <Line label="التسليم" value={promisedLabel} />
                 <Line label="الفرع" value={branchName ?? "—"} />
               </dl>
+              <ol className="mt-2 space-y-1.5 border-t border-slate-200 pt-2">
+                {items.map((it, i) => (
+                  <li key={it.key} className="flex justify-between gap-3">
+                    <span className="min-w-0 truncate font-medium text-slate-700">
+                      {items.length > 1 && <span className="text-slate-400">{i + 1}. </span>}
+                      {[it.name || "—", it.karat, it.weight ? `${it.weight} غ` : ""].filter(Boolean).join(" · ")}
+                    </span>
+                    <span className="shrink-0 text-slate-500">{it.cost ? `${it.cost} د.ل` : "السعر لاحقاً"}</span>
+                  </li>
+                ))}
+              </ol>
             </div>
 
-            <button
-              type="button"
-              onClick={() => setShowMore((v) => !v)}
-              className="w-full py-1 text-sm text-slate-500 underline-offset-4 hover:underline"
-            >
-              {showMore ? "إخفاء" : "تعديل نوع القطعة أو الفرع"}
-            </button>
-
-            {showMore && (
-              <div className="space-y-3 border-t border-slate-100 pt-3">
-                <div>
-                  <label className="label" htmlFor="item_type">نوع القطعة</label>
-                  <select id="item_type" className="field" value={itemType} onChange={(e) => setItemType(e.target.value)}>
-                    <option value="">—</option>
-                    {ITEM_TYPE_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
-                  </select>
-                </div>
-                {branches.length > 1 && (
-                  <div>
+            {branches.length > 1 && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setShowMore((v) => !v)}
+                  className="w-full py-1 text-sm text-slate-500 underline-offset-4 hover:underline"
+                >
+                  {showMore ? "إخفاء" : "تغيير الفرع"}
+                </button>
+                {showMore && (
+                  <div className="border-t border-slate-100 pt-3">
                     <label className="label" htmlFor="branch">الفرع</label>
                     <select id="branch" className="field" value={branchId} onChange={(e) => setBranchId(e.target.value)}>
                       {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
                     </select>
                   </div>
                 )}
-              </div>
+              </>
             )}
           </div>
         )}
@@ -496,7 +440,7 @@ export default function NewTicket() {
         ) : (
           <button type="button" onClick={onSave} className="btn-success flex-1 py-4 text-base" disabled={busy}>
             {busy && <span className="spinner" />}
-            {busy ? "جارٍ الحفظ…" : "حفظ وطباعة الإيصال"}
+            {busy ? progress || "جارٍ الحفظ…" : items.length > 1 ? `حفظ وطباعة الإيصال (${items.length} قطع)` : "حفظ وطباعة الإيصال"}
           </button>
         )}
       </div>
@@ -509,6 +453,148 @@ function Line({ label, value }: { label: string; value: string }) {
     <div className="flex justify-between gap-3">
       <dt className="shrink-0 text-slate-400">{label}</dt>
       <dd className="text-left font-medium text-slate-700">{value}</dd>
+    </div>
+  );
+}
+
+/** بطاقة قطعة واحدة: كل ما يُطبع على إيصالها. */
+function ItemCard({
+  index, total, item, onChange, onRemove,
+}: {
+  index: number;
+  total: number;
+  item: Item;
+  onChange: (patch: Partial<Item>) => void;
+  onRemove?: () => void;
+}) {
+  const fileInput = useRef<HTMLInputElement>(null);
+  const [showType, setShowType] = useState(false);
+  const id = (f: string) => `${f}-${item.key}`;
+
+  return (
+    <div className={total > 1 ? "rounded-xl border border-gold-300/70 bg-white p-3 shadow-sm" : ""}>
+      {total > 1 && (
+        <div className="mb-3 flex items-center justify-between">
+          <span className="flex items-center gap-2 text-base font-bold text-brand-800">
+            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-gold-600 text-sm text-white">{index + 1}</span>
+            القطعة {index + 1}
+          </span>
+          {onRemove && (
+            <button type="button" onClick={onRemove} className="rounded-lg px-2 py-1 text-sm text-red-600 hover:bg-red-50">
+              حذف
+            </button>
+          )}
+        </div>
+      )}
+
+      <div className="space-y-4">
+        <div>
+          <label className="label text-base" htmlFor={id("name")}>ما هي القطعة؟</label>
+          <input
+            id={id("name")}
+            autoFocus={index === 0}
+            className="field py-3.5 text-lg"
+            placeholder="مثال: خاتم ذهب بفص"
+            value={item.name}
+            onChange={(e) => onChange({ name: e.target.value })}
+          />
+        </div>
+
+        <div>
+          <label className="label text-base">العيار</label>
+          {/* أزرار بدل قائمة منسدلة: الخيارات قليلة واللمس أسرع من فتح قائمة. */}
+          <div className="grid grid-cols-4 gap-2">
+            {KARAT_OPTIONS.map((o) => (
+              <button
+                key={o}
+                type="button"
+                onClick={() => onChange({ karat: item.karat === o ? "" : o })}
+                className={`rounded-lg border py-3 text-sm font-semibold transition ${
+                  item.karat === o ? "border-brand-700 bg-brand-700 text-white" : "border-slate-300 bg-white text-slate-700"
+                }`}
+              >
+                {o}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <label className="label text-base" htmlFor={id("weight")}>الوزن بالغرام</label>
+          <input
+            id={id("weight")}
+            type="text"
+            inputMode="decimal"
+            dir="ltr"
+            className="field py-3.5 text-left text-lg"
+            placeholder="0.000"
+            value={item.weight}
+            onChange={(e) => onChange({ weight: normalizeDigits(e.target.value) })}
+          />
+          {index === 0 && (
+            <p className="mt-1.5 text-xs text-slate-500">مهم: يُقارَن بالوزن عند التسليم للتأكد أن الذهب لم ينقص.</p>
+          )}
+        </div>
+
+        <div>
+          <label className="label text-base" htmlFor={id("problem")}>ما المطلوب عمله؟</label>
+          <textarea
+            id={id("problem")}
+            rows={2}
+            className="field text-lg"
+            placeholder="مثال: كسر في المشبك، تلميع، تصغير مقاس"
+            value={item.problem}
+            onChange={(e) => onChange({ problem: e.target.value })}
+          />
+        </div>
+
+        {/* السعر بارز — يراه الزبون ويتفق عليه قبل أن يترك قطعته. فارغ = يُحدَّد بعد الفحص. */}
+        <div className="flex items-center gap-3 rounded-xl border border-gold-300/70 bg-gradient-to-b from-gold-50 to-white px-3 py-2">
+          <label htmlFor={id("cost")} className="shrink-0 text-sm font-bold text-brand-800">السعر التقريبي</label>
+          <input
+            id={id("cost")}
+            type="text"
+            inputMode="decimal"
+            dir="ltr"
+            className="min-w-0 flex-1 border-0 border-b-2 border-gold-400 bg-transparent py-1 text-center text-2xl font-extrabold text-brand-900 outline-none placeholder:text-sm placeholder:font-normal placeholder:text-slate-400 focus:border-brand-600"
+            placeholder="فارغ = لاحقاً"
+            value={item.cost}
+            onChange={(e) => onChange({ cost: normalizeDigits(e.target.value) })}
+          />
+          <span className="shrink-0 font-bold text-gold-700">د.ل</span>
+        </div>
+
+        <div>
+          <input
+            ref={fileInput}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            multiple
+            className="hidden"
+            onChange={(e) => onChange({ files: Array.from(e.target.files ?? []) })}
+          />
+          <button
+            type="button"
+            onClick={() => fileInput.current?.click()}
+            className={`w-full rounded-lg border-2 border-dashed py-4 text-sm font-medium transition ${
+              item.files.length > 0 ? "border-brand-400 bg-brand-50 text-brand-700" : "border-slate-300 text-slate-500"
+            }`}
+          >
+            {item.files.length > 0 ? `✓ ${item.files.length} صورة — اضغط للتغيير` : "📷 صوّر القطعة"}
+          </button>
+        </div>
+
+        <button type="button" onClick={() => setShowType((v) => !v)} className="text-xs text-slate-500 underline-offset-4 hover:underline">
+          {showType || item.type ? "نوع القطعة" : "+ نوع القطعة (اختياري)"}
+        </button>
+        {(showType || item.type) && (
+          <select className="field" value={item.type} onChange={(e) => onChange({ type: e.target.value })}>
+            <option value="">—</option>
+            {ITEM_TYPE_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
+          </select>
+        )}
+      </div>
     </div>
   );
 }
