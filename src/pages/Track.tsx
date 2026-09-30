@@ -4,6 +4,7 @@ import { FUNCTIONS_URL } from "@/lib/supabase";
 import { REPAIR_STATUS, OPEN_STATUSES } from "@/lib/constants";
 import { formatDate } from "@/lib/format";
 import { Logo } from "@/components/Logo";
+import { useAuth } from "@/lib/auth";
 import type { RepairStatus } from "@/lib/types";
 
 const STEPS: RepairStatus[] = ["received", "in_progress", "ready", "delivered"];
@@ -217,6 +218,23 @@ function Confetti() {
   );
 }
 
+/**
+ * الموظف (مسجّل الدخول) يفتح صفحة المتابعة من داخل التطبيق ليرى ما يراه الزبون — زر
+ * يعيده للرئيسية. الزبون لا يرى الزر أصلاً (لا جلسة موظف على جهازه).
+ */
+function StaffHomeButton() {
+  const { staff } = useAuth();
+  if (!staff) return null;
+  return (
+    <Link to="/" className="trk-home-btn" aria-label="العودة للرئيسية">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" strokeWidth={2.2}>
+        <path d="M4 11.5 12 4l8 7.5M6 10v9a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-9" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+      الرئيسية
+    </Link>
+  );
+}
+
 export default function Track() {
   const { token } = useParams<{ token: string }>();
   const [data, setData] = useState<TrackData | null>(null);
@@ -305,6 +323,7 @@ export default function Track() {
     return (
       <div className="trk-bg flex min-h-dvh items-center justify-center px-4">
         <Aurora />
+        <StaffHomeButton />
         <div className="trk-glass trk-rise relative p-8 text-center">
           <Logo size={64} className="mx-auto mb-4" />
           <p className="text-gold-100">{error}</p>
@@ -357,6 +376,7 @@ export default function Track() {
     <div className="trk-bg min-h-dvh px-4 pb-10 pt-8" data-stage={ticket.status}>
       <Aurora />
       {ticket.status === "delivered" && <Hearts />}
+      <StaffHomeButton />
       {(isReady || justUpdated) && <Confetti key={`${ticket.status}-${justUpdated}`} />}
 
       <div className="relative mx-auto max-w-md space-y-4">
