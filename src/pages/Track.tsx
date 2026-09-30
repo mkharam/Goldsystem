@@ -231,6 +231,24 @@ export default function Track() {
     async (silent: boolean) => {
       if (!token) return;
       try {
+        // معاينة التصميم أثناء التطوير فقط (?demo=ready …) — تُحذف من نسخة الإنتاج.
+        const demo = import.meta.env.DEV ? new URLSearchParams(window.location.search).get("demo") : null;
+        if (demo) {
+          const st = demo as RepairStatus;
+          setData({
+            ticket: {
+              ticket_number: "R-26-01-0015", item_name: "خاتم ذهب بفص", status: st,
+              received_at: "2026-09-27T10:00:00Z", promised_at: "2026-10-09T15:00:00Z",
+              ready_at: st === "ready" || st === "delivered" ? "2026-09-30T09:00:00Z" : null,
+              delivered_at: st === "delivered" ? "2026-09-30T12:00:00Z" : null,
+              branch_name: "حي الأندلس", branch_phone: "0911111111",
+            },
+            photos: [], siblings: [], feedback: null, shop_name: "مجوهرات مخرّم",
+            receipt_footer: "يرجى الاحتفاظ بهذا الإيصال لاستلام القطعة",
+          });
+          setLastFetch(Date.now());
+          return;
+        }
         // صفحة عامة: لا تمرّ بـ Supabase مباشرة — دالة track وحدها تقرّر ما يُعرض.
         const res = await fetch(`${FUNCTIONS_URL}/track?token=${encodeURIComponent(token)}`);
         if (res.status === 404 || res.status === 400) throw new Error("لم نعثر على هذه التذكرة");
@@ -335,8 +353,10 @@ export default function Track() {
   };
 
   return (
-    <div className="trk-bg min-h-dvh px-4 pb-10 pt-8">
+    // لكل مرحلة هوية: ألوان الوهج وحركة الرمز تتغيّر (راجع ‎[data-stage]‎ في index.css).
+    <div className="trk-bg min-h-dvh px-4 pb-10 pt-8" data-stage={ticket.status}>
       <Aurora />
+      {ticket.status === "delivered" && <Hearts />}
       {(isReady || justUpdated) && <Confetti key={`${ticket.status}-${justUpdated}`} />}
 
       <div className="relative mx-auto max-w-md space-y-4">
@@ -477,6 +497,17 @@ export default function Track() {
           <img src={lightbox} alt="صورة القطعة" />
         </button>
       )}
+    </div>
+  );
+}
+
+/** قلوب ذهبية تصعد ببطء بعد التسليم — شكر هادئ. */
+function Hearts() {
+  return (
+    <div className="trk-hearts" aria-hidden="true">
+      {Array.from({ length: 10 }).map((_, i) => (
+        <span key={i} style={{ left: `${8 + ((i * 41) % 84)}%`, animationDelay: `${i * 0.9}s` }}>♥</span>
+      ))}
     </div>
   );
 }

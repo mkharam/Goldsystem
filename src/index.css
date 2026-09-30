@@ -1121,3 +1121,95 @@
   }
   .trk-confetti { display: none; }
 }
+
+/* ——— هوية لكل مرحلة ———
+   مستلمة: زمرّدي هادئ ومطمئن · قيد التنفيذ: ذهب دافئ وشرر يدور (الحرفي يعمل) ·
+   جاهزة: ذهب ساطع واحتفال · مسلّمة: شمبانيا ناعمة وقلوب · ملغاة: رمادي وردي خافت. */
+.trk-bg[data-stage="received"] {
+  background: radial-gradient(120% 80% at 50% 0%, #135a40 0%, #06150f 58%, #030b08 100%);
+}
+.trk-bg[data-stage="received"] .trk-aurora .a1 { background: rgb(90 163 132 / 0.35); }
+.trk-bg[data-stage="received"] .trk-aurora .a3 { background: rgb(201 162 74 / 0.14); }
+
+.trk-bg[data-stage="in_progress"] {
+  background: radial-gradient(120% 80% at 50% 0%, #3d2f12 0%, #0e1a12 55%, #050a07 100%);
+}
+.trk-bg[data-stage="in_progress"] .trk-aurora .a1 { background: rgb(217 182 106 / 0.45); }
+.trk-bg[data-stage="in_progress"] .trk-aurora .a2 { background: rgb(168 125 40 / 0.35); }
+.trk-bg[data-stage="in_progress"] .trk-ring-icon svg {
+  animation: trk-spin 9s linear infinite;
+}
+.trk-bg[data-stage="in_progress"] .trk-ring::after {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  border-radius: 50%;
+  border: 2px dashed rgb(225 187 118 / 0.35);
+  animation: trk-spin 14s linear infinite reverse;
+}
+
+.trk-bg[data-stage="ready"] {
+  background: radial-gradient(120% 80% at 50% 0%, #6b4e15 0%, #1a2a14 50%, #050a07 100%);
+}
+.trk-bg[data-stage="ready"] .trk-aurora span { opacity: 0.75; }
+.trk-bg[data-stage="ready"] .trk-aurora .a1 { background: rgb(245 233 207 / 0.4); }
+.trk-bg[data-stage="ready"] .trk-aurora .a2 { background: rgb(217 182 106 / 0.45); }
+.trk-bg[data-stage="ready"] .trk-aurora .a3 { background: rgb(255 246 223 / 0.3); }
+.trk-bg[data-stage="ready"] .trk-status-title {
+  font-size: 2rem;
+  background: linear-gradient(100deg, #e1bb76, #fff6df 45%, #d9b66a 60%, #e1bb76);
+  background-size: 250% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: trk-rise 0.7s cubic-bezier(0.22, 1, 0.36, 1) both, trk-shimmer 3.5s linear infinite;
+}
+
+.trk-bg[data-stage="delivered"] {
+  background: radial-gradient(120% 80% at 50% 0%, #4a3f2c 0%, #16140f 55%, #080706 100%);
+}
+.trk-bg[data-stage="delivered"] .trk-aurora .a1 { background: rgb(245 233 207 / 0.3); }
+.trk-bg[data-stage="delivered"] .trk-aurora .a2 { background: rgb(175 141 81 / 0.3); }
+.trk-bg[data-stage="delivered"] .trk-ring-icon svg {
+  animation: trk-heartbeat 1.6s ease-in-out infinite;
+}
+@keyframes trk-heartbeat {
+  0%, 100% { transform: scale(1); }
+  15% { transform: scale(1.12); }
+  30% { transform: scale(1); }
+  45% { transform: scale(1.08); }
+}
+
+.trk-bg[data-stage="cancelled"] {
+  background: radial-gradient(120% 80% at 50% 0%, #3a2a2e 0%, #121012 55%, #070607 100%);
+}
+.trk-bg[data-stage="cancelled"] .trk-aurora span { opacity: 0.25; }
+.trk-bg[data-stage="cancelled"] .trk-aurora .a1 { background: rgb(190 120 130 / 0.3); }
+
+.trk-hearts {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.trk-hearts span {
+  position: absolute;
+  bottom: -30px;
+  font-size: 18px;
+  color: rgb(225 187 118 / 0.55);
+  animation: trk-rise-heart 9s ease-in infinite;
+}
+@keyframes trk-rise-heart {
+  0% { transform: translateY(0) scale(0.6); opacity: 0; }
+  15% { opacity: 1; }
+  100% { transform: translateY(-110vh) scale(1.2); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .trk-ring-icon svg,
+  .trk-ring::after,
+  .trk-status-title {
+    animation: none !important;
+  }
+  .trk-hearts { display: none; }
+}
