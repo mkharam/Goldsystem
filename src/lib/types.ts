@@ -93,6 +93,8 @@ export type TicketWithRelations = RepairTicket & {
   branch: Pick<Branch, "id" | "name" | "code" | "phone"> | null;
   received_by_staff: { full_name: string } | null;
   assigned_to_staff: { full_name: string } | null;
+  /** رابط موقّع لأول صورة للقطعة (صورة الاستلام إن وُجدت) — في القوائم فقط. */
+  photo_url?: string | null;
 };
 
 /** نتيجة بحث القطعة في المخزون — تُستخدم لتعبئة نموذج الاستلام. */

@@ -20,6 +20,16 @@ export function TicketCard({ ticket, index = 0 }: { ticket: TicketWithRelations;
       // القائمة الطويلة بطيئة الظهور.
       style={{ animationDelay: `${Math.min(index, 8) * 35}ms` }}
     >
+      <div className="flex gap-3">
+      {ticket.photo_url && (
+        <img
+          src={ticket.photo_url}
+          alt=""
+          loading="lazy"
+          className="h-[72px] w-[72px] shrink-0 rounded-lg border border-gold-200 bg-white object-cover"
+        />
+      )}
+      <div className="min-w-0 flex-1">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="font-bold text-slate-900">{ticket.item_name}</p>
@@ -46,6 +56,8 @@ export function TicketCard({ ticket, index = 0 }: { ticket: TicketWithRelations;
           <span className="font-medium text-slate-700">{ticket.received_by_staff?.full_name ?? "—"}</span>
         </span>
         <span className="text-slate-400">{formatDateTime(ticket.received_at)}</span>
+      </div>
+      </div>
       </div>
     </Link>
   );

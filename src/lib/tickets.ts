@@ -1,4 +1,4 @@
-import { supabase } from "./supabase";
+import { supabase, signedPhotoUrls } from "./supabase";
 import { OPEN_STATUSES, ALLOWED_TRANSITIONS } from "./constants";
 import { setItemStatus, lookupCustomers, createInventoryCustomer, syncTickets } from "./inventory";
 import { phoneDigits, normalizeDigits } from "./constants";
@@ -42,8 +42,13 @@ export function parseSearchDate(term: string): { from: string; to: string } | nu
   return { from: start.toISOString(), to: end.toISOString() };
 }
 
+type PhotoRef = { storage_path: string; stage: string; created_at: string };
+
 export async function listTickets(filters: TicketFilters = {}): Promise<TicketWithRelations[]> {
-  let query = supabase.from("repair_tickets").select(TICKET_SELECT);
+  // صور القطعة مع التذكرة في نفس الطلب، لتظهر مصغّرة في بطاقات القائمة.
+  let query = supabase.from("repair_tickets").select(
+    `${TICKET_SELECT}, photos:repair_photos!repair_photos_ticket_id_fkey (storage_path, stage, created_at)`,
+  );
 
   if (filters.status === "open") query = query.in("status", OPEN_STATUSES);
   else if (filters.status === "overdue") {
@@ -90,7 +95,17 @@ export async function listTickets(filters: TicketFilters = {}): Promise<TicketWi
   const { data, error } = await query.limit(filters.limit ?? 100);
 
   if (error) throw new Error(error.message);
-  return (data ?? []) as unknown as TicketWithRelations[];
+  const rows = (data ?? []) as unknown as (TicketWithRelations & { photos?: PhotoRef[] })[];
+
+  // أول صورة لكل تذكرة: صورة الاستلام أولاً، وإلا أقدم صورة. كل الروابط في طلب واحد.
+  const firstPath = new Map<string, string>();
+  for (const t of rows) {
+    const photos = [...(t.photos ?? [])].sort((a, b) => a.created_at.localeCompare(b.created_at));
+    const first = photos.find((p) => p.stage === "intake") ?? photos[0];
+    if (first) firstPath.set(t.id, first.storage_path);
+  }
+  const urls = await signedPhotoUrls(Array.from(firstPath.values()));
+  return rows.map(({ photos: _photos, ...t }) => ({ ...t, photo_url: urls[firstPath.get(t.id) ?? ""] ?? null }));
 }
 
 export async function getTicket(id: string): Promise<TicketWithRelations | null> {
