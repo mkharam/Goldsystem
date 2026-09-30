@@ -1,6 +1,7 @@
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { Logo } from "./Logo";
+import { useTheme } from "@/lib/theme";
 
 function HomeIcon({ active }: { active: boolean }) {
   return (
@@ -42,9 +43,10 @@ export function AppShell({
   const onHome = pathname === "/";
   const onNew = pathname === "/tickets/new";
   const onCalendar = pathname === "/calendar";
+  const [theme, toggleTheme] = useTheme();
 
   return (
-    <div className="min-h-dvh pb-32">
+    <div className={`min-h-dvh pb-32 ${theme === "dark" ? "theme-dark" : ""}`}>
       <header className="brand-surface sticky top-0 z-20 text-white shadow-md">
         <div className="mx-auto flex max-w-3xl items-center justify-between gap-3 px-4 py-2.5">
           <div className="flex min-w-0 items-center gap-2.5">
@@ -61,6 +63,25 @@ export function AppShell({
               )}
             </div>
           </div>
+          <div className="flex shrink-0 items-center gap-2">
+          {/* الوضع الداكن/الفاتح — يُحفظ على هذا الجهاز. */}
+          <button
+            type="button"
+            onClick={toggleTheme}
+            aria-label={theme === "dark" ? "الوضع الفاتح" : "الوضع الداكن"}
+            className="flex h-9 w-9 items-center justify-center rounded-lg border border-gold-500/30 text-gold-200 transition active:scale-90 hover:bg-white/10"
+          >
+            {theme === "dark" ? (
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" strokeWidth={2}>
+                <circle cx="12" cy="12" r="4.2" stroke="currentColor" />
+                <path d="M12 2.5v2.2M12 19.3v2.2M4.6 4.6l1.6 1.6M17.8 17.8l1.6 1.6M2.5 12h2.2M19.3 12h2.2M4.6 19.4l1.6-1.6M17.8 6.2l1.6-1.6" stroke="currentColor" strokeLinecap="round" />
+              </svg>
+            ) : (
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" strokeWidth={2}>
+                <path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" stroke="currentColor" strokeLinejoin="round" />
+              </svg>
+            )}
+          </button>
           <button
             type="button"
             onClick={signOut}
@@ -69,6 +90,7 @@ export function AppShell({
           >
             خروج
           </button>
+          </div>
         </div>
         <div className="brand-hairline" />
       </header>
