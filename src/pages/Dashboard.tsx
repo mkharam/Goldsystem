@@ -6,6 +6,7 @@ import { BranchPicker, useBranches } from "@/components/BranchPicker";
 import { useAuth } from "@/lib/auth";
 import { getSettings, getStatusCounts, listTickets, type StatusCounts } from "@/lib/tickets";
 import { REPAIR_STATUS } from "@/lib/constants";
+import { parseSmartSearch } from "@/lib/smartSearch";
 import { supabase } from "@/lib/supabase";
 import { notifyCustomer } from "@/lib/whatsapp";
 import { inventoryHealth, syncTickets } from "@/lib/inventory";
@@ -192,6 +193,11 @@ export default function Dashboard() {
     return out;
   }, [tickets]);
 
+  const understood = useMemo(() => {
+    const q = parseSmartSearch(search);
+    return q.range ? q : null;
+  }, [search]);
+
   const total = counts?.[tab] ?? null;
   const hasMore = !search && total !== null && tickets.length < total;
 
@@ -207,7 +213,7 @@ export default function Dashboard() {
       <div className="relative mb-3">
         <input
           className="field pr-10"
-          placeholder="ابحث بأي شيء: الاسم، الهاتف، القطعة، الموظف، التاريخ 28/9…"
+          placeholder="ابحث: محمد، امس، الاسبوع الي فات، خاتم السبت…"
           value={search}
           onChange={(e) => setParam("q", e.target.value)}
           enterKeyHint="search"
@@ -226,6 +232,15 @@ export default function Dashboard() {
           </button>
         )}
       </div>
+
+      {/* ما فهمه البحث من التاريخ — يطمئن الموظف أن «امس» فُهمت أمس فعلاً. */}
+      {understood && (
+        <p className="-mt-1 mb-3 flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
+          <span className="rounded-full bg-gold-100 px-2 py-0.5 font-semibold text-gold-800">📅 {understood.range!.label}</span>
+          {understood.text && <span className="rounded-full bg-slate-100 px-2 py-0.5 font-semibold text-slate-700">🔍 {understood.text}</span>}
+          <span>— حسب تاريخ الاستلام</span>
+        </p>
+      )}
 
       {/* المبدّل للمدير العام فقط — غيره يرى فرعه وحده، وقاعدة البيانات تفرض ذلك أيضاً. */}
       {staff?.role === "admin" && <BranchPicker branches={branches} value={branch} onChange={setBranch} />}

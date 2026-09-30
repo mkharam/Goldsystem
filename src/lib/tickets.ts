@@ -1,7 +1,8 @@
 import { supabase, signedPhotoUrls } from "./supabase";
 import { OPEN_STATUSES, ALLOWED_TRANSITIONS } from "./constants";
 import { setItemStatus, lookupCustomers, createInventoryCustomer, syncTickets } from "./inventory";
-import { phoneDigits, normalizeDigits } from "./constants";
+import { phoneDigits } from "./constants";
+import { parseSmartSearch } from "./smartSearch";
 import type { RepairStatus, TicketWithRelations, StatusHistoryEntry, RepairPhoto, Customer } from "./types";
 
 const TICKET_SELECT = `
@@ -19,28 +20,9 @@ export type TicketFilters = {
   limit?: number;
   /** الأحدث أولاً (صفحة التذاكر) بدل الأقرب موعداً (لوحة اليوم). */
   newest?: boolean;
+  /** تذاكر حدث لها شيء في فترة: استُلمت أو جهزت أو سُلّمت أو موعدها فيها. */
+  range?: { field: "received_at" | "ready_at" | "delivered_at" | "promised_at"; from: string; to: string };
 };
-
-/**
- * يفهم التاريخ كما يكتبه الموظف: 28/9 أو 28-9-2026 أو 2026-09-28 — ويعيد بداية اليوم
- * ونهايته بتوقيت الجهاز. أي نص آخر ليس تاريخاً.
- */
-export function parseSearchDate(term: string): { from: string; to: string } | null {
-  let y: number, m: number, d: number;
-  let match = term.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/);
-  if (match) [y, m, d] = [Number(match[1]), Number(match[2]), Number(match[3])];
-  else {
-    match = term.match(/^(\d{1,2})[-/.](\d{1,2})(?:[-/.](\d{2,4}))?$/);
-    if (!match) return null;
-    d = Number(match[1]);
-    m = Number(match[2]);
-    y = match[3] ? Number(match[3].length === 2 ? `20${match[3]}` : match[3]) : new Date().getFullYear();
-  }
-  const start = new Date(y, m - 1, d);
-  if (start.getMonth() !== m - 1 || start.getDate() !== d) return null;
-  const end = new Date(y, m - 1, d + 1);
-  return { from: start.toISOString(), to: end.toISOString() };
-}
 
 type PhotoRef = { storage_path: string; stage: string; created_at: string };
 
@@ -57,34 +39,49 @@ export async function listTickets(filters: TicketFilters = {}): Promise<TicketWi
 
   if (filters.branchId) query = query.eq("branch_id", filters.branchId);
 
+  // نطاق تاريخ صريح (صفحة التقويم): استُلمت / جهزت / سُلّمت / موعدها في يوم معيّن.
+  if (filters.range) {
+    query = query.gte(filters.range.field, filters.range.from).lt(filters.range.field, filters.range.to);
+  }
+
   if (filters.search?.trim()) {
-    const term = normalizeDigits(filters.search.trim()).replace(/[,()%*"\\]/g, "");
-    // الزبون يأتي غالباً بلا إيصال — نبحث باسمه أو رقم هاتفه أيضاً، لا برقم التذكرة وحده.
-    const digits = phoneDigits(term);
-    const customerFilter = digits.length >= 3
-      ? `full_name.ilike.%${term}%,phone.ilike.%${digits.slice(-6)}%`
-      : `full_name.ilike.%${term}%`;
-    // بحث بأي طريقة: رقم التذكرة، الزبون (اسم/هاتف)، القطعة ونوعها وعيارها، العطل،
-    // الموظف الذي استلمها، أو تاريخ الاستلام.
-    const [{ data: customers }, { data: staffRows }] = await Promise.all([
-      supabase.from("customers").select("id").or(customerFilter).limit(50),
-      supabase.from("staff").select("id").ilike("full_name", `%${term}%`).limit(20),
-    ]);
-    const ids = (customers ?? []).map((c) => c.id);
-    const staffIds = (staffRows ?? []).map((s) => s.id);
-    const parts = [
-      `ticket_number.ilike.%${term}%`,
-      `item_name.ilike.%${term}%`,
-      `item_type.ilike.%${term}%`,
-      `karat.ilike.%${term}%`,
-      `problem_description.ilike.%${term}%`,
-      `work_done.ilike.%${term}%`,
-    ];
-    if (ids.length) parts.push(`customer_id.in.(${ids.join(",")})`);
-    if (staffIds.length) parts.push(`received_by.in.(${staffIds.join(",")})`);
-    const day = parseSearchDate(term);
-    if (day) parts.push(`and(received_at.gte."${day.from}",received_at.lt."${day.to}")`);
-    query = query.or(parts.join(","));
+    // بحث بلغة الموظف: التاريخ («امس»، «الاسبوع الي فات»، «السبت»، «28/9»…) يُفصل ويصبح
+    // شرطاً على تاريخ الاستلام، وما بقي يُبحث به في كل الحقول. «محمد امس» = الاثنان معاً.
+    const { range, text } = parseSmartSearch(filters.search);
+    if (range) {
+      query = query.gte("received_at", range.from.toISOString()).lt("received_at", range.to.toISOString());
+    }
+    const term = text.replace(/[,()%*"\\]/g, "");
+    if (term) {
+      // النص مطبّع (ا/ه/ي بدل أ/ة/ى…)؛ للحقول غير المطبّعة نجعل هذه الحروف حرفاً
+      // بديلاً (_) حتى تطابق «سلسلة» و«سلسله» معاً.
+      const loose = term.replace(/[اهيو]/g, "_");
+      const digits = phoneDigits(term);
+      const [{ data: customerIds }, phoneRows, { data: staffRows }] = await Promise.all([
+        // الاسم يُطابَق في قاعدة البيانات بعد التطبيع وبأي ترتيب للكلمات.
+        supabase.rpc("search_customer_ids", { q: term }),
+        digits.length >= 3
+          ? supabase.from("customers").select("id").ilike("phone", `%${digits.slice(-6)}%`).limit(50)
+          : Promise.resolve({ data: [] as { id: string }[] }),
+        supabase.from("staff").select("id").ilike("full_name", `%${loose}%`).limit(20),
+      ]);
+      const ids = Array.from(new Set([
+        ...((customerIds as string[] | null) ?? []),
+        ...((phoneRows.data ?? []) as { id: string }[]).map((c) => c.id),
+      ]));
+      const staffIds = (staffRows ?? []).map((s) => s.id);
+      const parts = [
+        `ticket_number.ilike.%${term}%`,
+        `item_name.ilike.%${loose}%`,
+        `item_type.ilike.%${loose}%`,
+        `karat.ilike.%${term}%`,
+        `problem_description.ilike.%${loose}%`,
+        `work_done.ilike.%${loose}%`,
+      ];
+      if (ids.length) parts.push(`customer_id.in.(${ids.slice(0, 100).join(",")})`);
+      if (staffIds.length) parts.push(`received_by.in.(${staffIds.join(",")})`);
+      query = query.or(parts.join(","));
+    }
   }
 
   query = filters.newest
