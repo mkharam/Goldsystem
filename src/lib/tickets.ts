@@ -53,7 +53,7 @@ export async function listTickets(filters: TicketFilters = {}): Promise<TicketWi
   if (filters.status === "open") query = query.in("status", OPEN_STATUSES);
   else if (filters.status === "overdue") {
     query = query.in("status", OPEN_STATUSES).lt("promised_at", new Date().toISOString());
-  } else if (filters.status) query = query.eq("status", filters.status);
+  } else if (filters.status && filters.status !== "all") query = query.eq("status", filters.status);
 
   if (filters.branchId) query = query.eq("branch_id", filters.branchId);
 
