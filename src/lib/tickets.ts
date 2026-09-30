@@ -346,37 +346,23 @@ export async function transitionTicket(input: TransitionInput): Promise<Transiti
   return { ok: true };
 }
 
-export type DashboardStats = {
-  open: number;
-  overdue: number;
-  ready: number;
-  inProgress: number;
-  deliveredToday: number;
-};
+export type StatusCounts = Record<RepairStatus | "all" | "overdue", number>;
 
-export async function getDashboardStats(branchId?: string): Promise<DashboardStats> {
+/** عدد التذاكر في كل حالة — أرقام تبويبات الرئيسية. */
+export async function getStatusCounts(branchId?: string): Promise<StatusCounts> {
   const base = () => {
     const q = supabase.from("repair_tickets").select("id", { count: "exact", head: true });
     return branchId ? q.eq("branch_id", branchId) : q;
   };
-  const startOfToday = new Date();
-  startOfToday.setHours(0, 0, 0, 0);
-
-  const [open, overdue, ready, inProgress, deliveredToday] = await Promise.all([
-    base().in("status", OPEN_STATUSES),
+  const statuses: RepairStatus[] = ["received", "in_progress", "ready", "delivered", "cancelled"];
+  const [all, overdue, ...rest] = await Promise.all([
+    base(),
     base().in("status", OPEN_STATUSES).lt("promised_at", new Date().toISOString()),
-    base().eq("status", "ready"),
-    base().eq("status", "in_progress"),
-    base().eq("status", "delivered").gte("delivered_at", startOfToday.toISOString()),
+    ...statuses.map((s) => base().eq("status", s)),
   ]);
-
-  return {
-    open: open.count ?? 0,
-    overdue: overdue.count ?? 0,
-    ready: ready.count ?? 0,
-    inProgress: inProgress.count ?? 0,
-    deliveredToday: deliveredToday.count ?? 0,
-  };
+  const counts = { all: all.count ?? 0, overdue: overdue.count ?? 0 } as StatusCounts;
+  statuses.forEach((s, i) => (counts[s] = rest[i].count ?? 0));
+  return counts;
 }
 
 const DEFAULT_SETTINGS = {
