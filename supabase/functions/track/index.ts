@@ -100,7 +100,7 @@ Deno.serve(async (req) => {
     .neq("id", ticket.id)
     .gte("received_at", new Date(at - 10 * 60_000).toISOString())
     .lte("received_at", new Date(at + 10 * 60_000).toISOString())
-    .order("ticket_number");
+    .order("received_at");
   const siblings = (siblingRows ?? []).map((s) => ({
     ticket_number: s.ticket_number,
     item_name: s.item_name,
