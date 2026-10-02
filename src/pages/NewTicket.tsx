@@ -11,6 +11,7 @@ import {
   type CustomerMatch,
 } from "@/lib/tickets";
 import { KARAT_OPTIONS, ITEM_TYPE_OPTIONS, normalizeDigits } from "@/lib/constants";
+import { loadDraft, saveDraft, clearDraft, saveItemFiles, loadItemFiles } from "@/lib/draft";
 
 type Branch = { id: string; name: string; code: string | null };
 
@@ -69,8 +70,15 @@ export default function NewTicket() {
 
   // زبون بأكثر من قطعة: كل قطعة ببياناتها. تبدأ بقطعة واحدة، ويزيد الموظف العدد بزر.
   const [items, setItems] = useState<Item[]>([newItem()]);
-  const updateItem = (key: string, patch: Partial<Item>) =>
+  const updateItem = (key: string, patch: Partial<Item>) => {
+    // الصور تُحفظ فوراً في المسودّة — هي أصعب ما يُعاد إن أُغلق التطبيق.
+    if (patch.files) void saveItemFiles(key, patch.files);
     setItems((list) => list.map((it) => (it.key === key ? { ...it, ...patch } : it)));
+  };
+  const removeItem = (key: string) => {
+    void saveItemFiles(key, []);
+    setItems((list) => list.filter((x) => x.key !== key));
+  };
   const setCount = (n: number) =>
     setItems((list) => {
       const count = Math.min(MAX_ITEMS, Math.max(1, n));
@@ -83,6 +91,62 @@ export default function NewTicket() {
   const [progress, setProgress] = useState("");
   const [showMore, setShowMore] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
+  // تذاكر حُفظت قبل أن ينقطع الحفظ (إنترنت ضعيف/إغلاق التطبيق) — تُضمّ لإيصال الباقي.
+  const [savedIds, setSavedIds] = useState<string[]>([]);
+  // المسودّة: تُستعاد مرة عند الفتح، ثم تُحفظ مع كل تعديل. الآيفون يغلق التطبيق في الخلفية
+  // حين يفتح الموظف واتساب أو الكاميرا، فلا يضيع ما كتبه ولا صوره.
+  const [draftReady, setDraftReady] = useState(false);
+  const [restored, setRestored] = useState(false);
+
+  useEffect(() => {
+    const d = loadDraft();
+    if (!d) {
+      setDraftReady(true);
+      return;
+    }
+    setStep(d.step);
+    setPhone(d.phone);
+    setCustomerName(d.customerName);
+    setCustomerId(d.customerId);
+    if (d.branchId) setBranchId(d.branchId);
+    setPromisedAt(d.promisedAt);
+    setSavedIds(d.savedIds ?? []);
+    setItems(d.items.length ? d.items.map((it) => ({ ...it, files: [] })) : [newItem()]);
+    setRestored(true);
+    setDraftReady(true);
+    // الصور من IndexedDB بعد النصوص — لا ننتظرها لعرض النموذج.
+    void Promise.all(d.items.map(async (it) => [it.key, await loadItemFiles(it.key)] as const)).then((pairs) => {
+      const byKey = new Map(pairs);
+      setItems((list) => list.map((it) => (byKey.get(it.key)?.length ? { ...it, files: byKey.get(it.key)! } : it)));
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!draftReady) return;
+    const empty = !phone.trim() && !customerName.trim() && savedIds.length === 0 &&
+      items.every((it) => !it.name.trim() && !it.problem.trim() && !it.weight.trim() && it.files.length === 0);
+    const t = setTimeout(() => {
+      if (empty) return void clearDraft();
+      saveDraft({
+        step, phone, customerName, customerId, branchId, promisedAt, savedIds,
+        items: items.map(({ files: _f, ...rest }) => rest),
+      });
+    }, 300);
+    return () => clearTimeout(t);
+  }, [draftReady, step, phone, customerName, customerId, branchId, promisedAt, items, savedIds]);
+
+  async function startOver() {
+    await clearDraft();
+    setStep(0);
+    setPhone("");
+    setCustomerName("");
+    setCustomerId("");
+    setPromisedAt("");
+    setSavedIds([]);
+    setItems([newItem()]);
+    setRestored(false);
+    setError(null);
+  }
 
   useEffect(() => {
     (async () => {
@@ -94,7 +158,8 @@ export default function NewTicket() {
       // غير المدير العام لا يفتح تذكرة إلا في فرعه (وRLS ترفض غير ذلك).
       const allowed = staff?.role === "admin" ? (rows ?? []) : (rows ?? []).filter((b) => b.id === staff?.branch_id);
       setBranches(allowed);
-      setBranchId(staff?.branch_id ?? allowed[0]?.id ?? "");
+      // لا نكتب فوق فرع استُعيد من المسودّة.
+      setBranchId((current) => current || staff?.branch_id || allowed[0]?.id || "");
       // موعد التسليم لا يُملأ تلقائياً: كان يُكتب "بعد 3 أيام" في كل إيصال حتى حين لم يتفق
       // الموظف مع الزبون على موعد، فيعود الزبون في يوم لم يَعِده به أحد. الموظف يختاره
       // بنفسه، وإن تركه فارغاً لا يُطبع في الإيصال أصلاً.
@@ -174,7 +239,7 @@ export default function NewTicket() {
 
       // تذكرة لكل قطعة، بالتتابع حتى تأخذ أرقاماً متتالية. ما حُفظ يبقى محفوظاً إن فشلت
       // قطعة لاحقة — لا نعيد إنشاءه عند إعادة المحاولة.
-      const ids: string[] = [];
+      const ids: string[] = [...savedIds];
       for (let i = 0; i < items.length; i++) {
         const it = items[i];
         if (items.length > 1) setProgress(`حفظ القطعة ${i + 1} من ${items.length}…`);
@@ -196,8 +261,10 @@ export default function NewTicket() {
         });
         await uploadPhotos(ticket.id, it.files);
         ids.push(ticket.id);
-        setItems((list) => list.filter((x) => x.key !== it.key));
+        setSavedIds([...ids]);
+        removeItem(it.key);
       }
+      await clearDraft();
       buzz([15, 60, 15]); // نبضتان: تُحسّ بوضوح كتأكيد "تم" دون أن تكون طويلة مزعجة.
       // الإيصال فوراً بعد الاستلام — الزبون واقف ينتظره. عدة قطع = إيصال واحد مجمّع.
       navigate(ids.length === 1 ? `/tickets/${ids[0]}/receipt` : `/receipts?ids=${ids.join(",")}`);
@@ -217,6 +284,17 @@ export default function NewTicket() {
   return (
     <AppShell inventoryDown={inventoryDown}>
       <h1 className="mb-4 text-center text-lg font-bold text-slate-900">{items.length > 1 ? `استلام ${items.length} قطع` : "استلام قطعة"}</h1>
+
+      {restored && (
+        <div className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-gold-300 bg-gold-50 px-3 py-2.5 text-sm">
+          <span className="text-slate-700">
+            ↩︎ أكملنا من حيث توقفت{savedIds.length > 0 && ` — ${savedIds.length} قطعة حُفظت من قبل`}
+          </span>
+          <button type="button" onClick={startOver} className="shrink-0 font-semibold text-gold-700 underline-offset-4 hover:underline">
+            استلام جديد
+          </button>
+        </div>
+      )}
 
       <Steps labels={STEP_LABELS} current={step} />
 
@@ -309,7 +387,7 @@ export default function NewTicket() {
                 total={items.length}
                 item={it}
                 onChange={(patch) => updateItem(it.key, patch)}
-                onRemove={items.length > 1 ? () => setItems((list) => list.filter((x) => x.key !== it.key)) : undefined}
+                onRemove={items.length > 1 ? () => removeItem(it.key) : undefined}
               />
             ))}
 
