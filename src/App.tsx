@@ -7,6 +7,7 @@ import NewTicket from "@/pages/NewTicket";
 import TicketDetail from "@/pages/TicketDetail";
 import Receipt from "@/pages/Receipt";
 import Calendar from "@/pages/Calendar";
+import { ResumeRoute } from "@/lib/resume";
 import Track from "@/pages/Track";
 
 function Protected({ children }: { children: React.ReactNode }) {
@@ -29,6 +30,7 @@ export default function App() {
     <AuthProvider>
       {/* basename يجعل المسارات تعمل تحت /Goldsystem/ على GitHub Pages ومن الجذر محلياً. */}
       <BrowserRouter basename={import.meta.env.BASE_URL}>
+        <ResumeRoute />
         <Routes>
           <Route path="/login" element={<Login />} />
           {/* صفحة التتبّع عامة: يفتحها الزبون بمسح الرمز بلا تسجيل دخول. */}
