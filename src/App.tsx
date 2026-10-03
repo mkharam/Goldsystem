@@ -13,6 +13,7 @@ const TicketDetail = lazy(() => import("@/pages/TicketDetail"));
 const Receipt = lazy(() => import("@/pages/Receipt"));
 const Calendar = lazy(() => import("@/pages/Calendar"));
 const Notify = lazy(() => import("@/pages/Notify"));
+const Delivered = lazy(() => import("@/pages/Delivered"));
 const Track = lazy(() => import("@/pages/Track"));
 
 function PageFallback() {
@@ -55,6 +56,7 @@ export default function App() {
             <Route path="/receipts" element={<Protected><Receipt /></Protected>} />
             <Route path="/calendar" element={<Protected><Calendar /></Protected>} />
             <Route path="/notify" element={<Protected><Notify /></Protected>} />
+            <Route path="/delivered" element={<Protected><Delivered /></Protected>} />
 
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

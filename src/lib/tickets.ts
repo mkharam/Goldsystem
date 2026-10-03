@@ -35,7 +35,10 @@ export async function listTickets(filters: TicketFilters = {}): Promise<TicketWi
   if (filters.status === "open") query = query.in("status", OPEN_STATUSES);
   else if (filters.status === "overdue") {
     query = query.in("status", OPEN_STATUSES).lt("promised_at", new Date().toISOString());
-  } else if (filters.status && filters.status !== "all") query = query.eq("status", filters.status);
+  } else if (filters.status === "all") {
+    // المسلّمة لها صفحتها الخاصة — القائمة الرئيسية لما يحتاج عملاً أو انتباهاً فعلاً.
+    query = query.neq("status", "delivered");
+  } else if (filters.status) query = query.eq("status", filters.status);
 
   if (filters.branchId) query = query.eq("branch_id", filters.branchId);
 
@@ -435,7 +438,7 @@ export async function getStatusCounts(branchId?: string): Promise<StatusCounts> 
   };
   const statuses: RepairStatus[] = ["received", "in_progress", "ready", "delivered", "cancelled"];
   const [all, overdue, ...rest] = await Promise.all([
-    base(),
+    base().neq("status", "delivered"),
     base().in("status", OPEN_STATUSES).lt("promised_at", new Date().toISOString()),
     ...statuses.map((s) => base().eq("status", s)),
   ]);

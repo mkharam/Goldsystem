@@ -19,13 +19,13 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 type TabKey = RepairStatus | "all" | "overdue";
 
 // ترتيب التبويبات بترتيب العمل اليومي: الكل، ثم ما يحتاج انتباهاً، ثم مراحل القطعة.
+// المسلّمة لها صفحتها الخاصة (/delivered) — لا تُشغل مكاناً هنا بعد انتهاء العمل عليها.
 const TABS: { key: TabKey; label: string; tone: string }[] = [
   { key: "all", label: "الكل", tone: "text-slate-800" },
   { key: "overdue", label: "متأخّرة", tone: "text-red-700" },
   { key: "ready", label: "جاهزة", tone: "text-brand-700" },
   { key: "received", label: REPAIR_STATUS.received.label, tone: "text-gold-800" },
   { key: "in_progress", label: REPAIR_STATUS.in_progress.label, tone: "text-blue-700" },
-  { key: "delivered", label: REPAIR_STATUS.delivered.label, tone: "text-slate-600" },
   { key: "cancelled", label: REPAIR_STATUS.cancelled.label, tone: "text-red-600" },
 ];
 
@@ -237,6 +237,15 @@ export default function Dashboard() {
               </button>
             );
           })}
+
+          {/* المسلّمة خارج هذه القائمة — لها صفحتها الخاصة، تُفتح من هنا. */}
+          <Link
+            to="/delivered"
+            className="flex items-center gap-1.5 whitespace-nowrap rounded-full border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-500 transition hover:border-brand-300 active:scale-95"
+          >
+            {REPAIR_STATUS.delivered.label}
+            <span className="text-slate-400">←</span>
+          </Link>
         </div>
       </div>
 
