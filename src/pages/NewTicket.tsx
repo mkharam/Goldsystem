@@ -12,6 +12,7 @@ import {
 } from "@/lib/tickets";
 import { KARAT_OPTIONS, ITEM_TYPE_OPTIONS, normalizeDigits } from "@/lib/constants";
 import { loadDraft, saveDraft, clearDraft, saveItemFiles, loadItemFiles } from "@/lib/draft";
+import { compressImages } from "@/lib/image";
 
 type Branch = { id: string; name: string; code: string | null };
 
@@ -72,8 +73,19 @@ export default function NewTicket() {
   // زبون بأكثر من قطعة: كل قطعة ببياناتها. تبدأ بقطعة واحدة، ويزيد الموظف العدد بزر.
   const [items, setItems] = useState<Item[]>([newItem()]);
   const updateItem = (key: string, patch: Partial<Item>) => {
-    // الصور تُحفظ فوراً في المسودّة — هي أصعب ما يُعاد إن أُغلق التطبيق.
-    if (patch.files) void saveItemFiles(key, patch.files);
+    if (patch.files) {
+      // نضغط الصور أولاً — صورة كاميرا خام قد تكون عدة ميغابايت، وهذا أبطأ ما
+      // في الاستلام على اتصال ضعيف. ثم تُحفظ فوراً في المسودّة.
+      void compressImages(patch.files).then((compressed) => {
+        void saveItemFiles(key, compressed);
+        setItems((list) => list.map((it) => (it.key === key ? { ...it, files: compressed } : it)));
+      });
+      const { files: _files, ...rest } = patch;
+      if (Object.keys(rest).length > 0) {
+        setItems((list) => list.map((it) => (it.key === key ? { ...it, ...rest } : it)));
+      }
+      return;
+    }
     setItems((list) => list.map((it) => (it.key === key ? { ...it, ...patch } : it)));
   };
   const removeItem = (key: string) => {

@@ -13,6 +13,7 @@ import {
 import { REPAIR_STATUS, PHOTO_STAGE, ALLOWED_TRANSITIONS, PRIMARY_NEXT, OPEN_STATUSES, KARAT_OPTIONS, ITEM_TYPE_OPTIONS, normalizeDigits } from "@/lib/constants";
 import { formatDateTime, formatWeight, formatMoney, overdueLabel, daysFromNow } from "@/lib/format";
 import { trackingUrl } from "@/lib/qr";
+import { compressImages } from "@/lib/image";
 import { notifyCustomer, defaultKind } from "@/lib/whatsapp";
 import type { RepairStatus, TicketWithRelations, StatusHistoryEntry, RepairPhoto } from "@/lib/types";
 
@@ -221,7 +222,8 @@ export default function TicketDetail() {
   async function addPhotos(fileList: FileList | null, stage: "progress" | "delivery") {
     if (!fileList || !ticket || !staff) return;
     let uploaded = 0;
-    for (const file of Array.from(fileList)) {
+    const files = await compressImages(Array.from(fileList));
+    for (const file of files) {
       const ext = file.name.split(".").pop()?.toLowerCase() ?? "jpg";
       const path = `${ticket.id}/${stage}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
       const { error } = await supabase.storage.from(PHOTO_BUCKET).upload(path, file, {

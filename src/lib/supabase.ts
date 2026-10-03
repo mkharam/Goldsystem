@@ -20,6 +20,15 @@ export const supabase = createClient(url, key, {
 export const FUNCTIONS_URL = `${url.replace(/\/+$/, "")}/functions/v1`;
 export const PHOTO_BUCKET = "repair-photos";
 
+/** يفتح اتصال TLS بـ Supabase مبكراً — أول طلب فعلي (الدخول أو تحميل التذاكر) لا ينتظره. */
+export function preconnectSupabase(): void {
+  const link = document.createElement("link");
+  link.rel = "preconnect";
+  link.href = url;
+  link.crossOrigin = "anonymous";
+  document.head.appendChild(link);
+}
+
 /** رابط موقّع قصير العمر لعرض صورة — الحاوية خاصة ولا تُقدَّم علناً. */
 export async function signedPhotoUrls(paths: string[], expiresIn = 3600): Promise<Record<string, string>> {
   if (paths.length === 0) return {};
