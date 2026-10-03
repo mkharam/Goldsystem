@@ -15,10 +15,21 @@
     <meta name="description" content="نظام استلام ومتابعة وتسليم قطع الصيانة" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!-- Aref Ruqaa تُستعمل بخط عريض فقط (700) — طلب وزن 400 الذي لا يُستعمل كان تحميلاً زائداً.
+         وتحميل خط الواجهة هذا لا يُحجب أول رسم للصفحة: ملف CSS بوزن media="print" يُحمَّل
+         بلا حجب، ثم يتحوّل إلى "all" عند اكتماله — الصفحة تظهر فوراً بخط النظام، ويتبدّل
+         الخط حين يصل، بدل أن ينتظر المتصفح وصول الخط قبل رسم أي شيء، وهذا أهم ما يُشعَر
+         به على اتصال ضعيف. -->
     <link
-      href="https://fonts.googleapis.com/css2?family=Aref+Ruqaa:wght@400;700&family=Cairo:wght@400;500;600;700;800&display=swap"
+      id="fonts-css"
+      href="https://fonts.googleapis.com/css2?family=Aref+Ruqaa:wght@700&family=Cairo:wght@400;500;600;700;800&display=swap"
       rel="stylesheet"
+      media="print"
+      onload="this.media='all'"
     />
+    <noscript>
+      <link href="https://fonts.googleapis.com/css2?family=Aref+Ruqaa:wght@700&family=Cairo:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    </noscript>
   </head>
   <body>
     <div id="root"></div>

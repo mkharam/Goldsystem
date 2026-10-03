@@ -12,4 +12,17 @@ export default defineConfig({
     alias: { "@": path.resolve(import.meta.dirname, "./src") },
   },
   server: { host: "::", port: 8080 },
+  build: {
+    rollupOptions: {
+      output: {
+        // React/Router يتغيّران بندرة؛ Supabase أكثر تحديثاً من تبعية التطبيق نفسها.
+        // فصلهما في حزم خاصة يجعل المتصفح يُبقي عليهما من الذاكرة المؤقتة بعد كل
+        // تحديث للتطبيق، بدل إعادة تنزيل نفس مكتبات React مع كل نشر جديد.
+        manualChunks: {
+          "vendor-react": ["react", "react-dom", "react-router-dom"],
+          "vendor-supabase": ["@supabase/supabase-js"],
+        },
+      },
+    },
+  },
 });
