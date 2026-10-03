@@ -7,10 +7,10 @@ import { useToast } from "@/lib/toast";
 import { buzz } from "@/lib/haptics";
 import { supabase, signedPhotoUrls, PHOTO_BUCKET } from "@/lib/supabase";
 import {
-  getTicket, getStatusHistory, getPhotos, transitionTicket, getSettings,
+  getTicket, getStatusHistory, getPhotos, transitionTicket, getSettings, updateTicketDetails,
   toleranceFrom, checkWeight, type Settings,
 } from "@/lib/tickets";
-import { REPAIR_STATUS, PHOTO_STAGE, ALLOWED_TRANSITIONS, PRIMARY_NEXT, OPEN_STATUSES, normalizeDigits } from "@/lib/constants";
+import { REPAIR_STATUS, PHOTO_STAGE, ALLOWED_TRANSITIONS, PRIMARY_NEXT, OPEN_STATUSES, KARAT_OPTIONS, ITEM_TYPE_OPTIONS, normalizeDigits } from "@/lib/constants";
 import { formatDateTime, formatWeight, formatMoney, overdueLabel, daysFromNow } from "@/lib/format";
 import { trackingUrl } from "@/lib/qr";
 import { notifyCustomer, defaultKind } from "@/lib/whatsapp";
@@ -43,6 +43,18 @@ export default function TicketDetail() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [showOther, setShowOther] = useState(false);
   const [busy, setBusy] = useState(false);
+
+  // تعديل بيانات التذكرة — لو الزبون زاد قطعة صغيرة أو طلب لحاماً إضافياً بعد الاستلام.
+  const [editing, setEditing] = useState(false);
+  const [editItemName, setEditItemName] = useState("");
+  const [editItemType, setEditItemType] = useState("");
+  const [editKarat, setEditKarat] = useState("");
+  const [editWeight, setEditWeight] = useState("");
+  const [editProblem, setEditProblem] = useState("");
+  const [editCost, setEditCost] = useState("");
+  const [editPromisedAt, setEditPromisedAt] = useState("");
+  const [editError, setEditError] = useState<string | null>(null);
+  const [editBusy, setEditBusy] = useState(false);
 
   const reload = useCallback(async () => {
     if (!id) return;
@@ -151,6 +163,51 @@ export default function TicketDetail() {
     setBusy(false);
     buzz();
     toast(target === "delivered" ? "تم تسليم القطعة" : "تم تحديث الحالة");
+  }
+
+  function startEdit() {
+    if (!ticket) return;
+    setEditItemName(ticket.item_name);
+    setEditItemType(ticket.item_type ?? "");
+    setEditKarat(ticket.karat ?? "");
+    setEditWeight(ticket.weight_in_grams !== null ? String(ticket.weight_in_grams) : "");
+    setEditProblem(ticket.problem_description);
+    setEditCost(ticket.estimated_cost !== null ? String(ticket.estimated_cost) : "");
+    setEditPromisedAt(toLocalInput(ticket.promised_at));
+    setEditError(null);
+    setEditing(true);
+  }
+
+  async function saveEdit() {
+    if (!ticket || !staff) return;
+    if (!editItemName.trim() || !editProblem.trim()) {
+      setEditError("اسم القطعة ووصف العمل المطلوب لا يمكن أن يكونا فارغين");
+      return;
+    }
+    setEditBusy(true);
+    setEditError(null);
+
+    const result = await updateTicketDetails(ticket.id, staff.staff_id, {
+      item_name: editItemName.trim(),
+      item_type: editItemType.trim() || null,
+      karat: editKarat.trim() || null,
+      weight_in_grams: editWeight.trim() ? Number(normalizeDigits(editWeight)) : null,
+      problem_description: editProblem.trim(),
+      estimated_cost: editCost.trim() ? Number(normalizeDigits(editCost)) : null,
+      promised_at: editPromisedAt ? new Date(editPromisedAt).toISOString() : null,
+    });
+
+    if (!result.ok) {
+      setEditError(result.error);
+      setEditBusy(false);
+      return;
+    }
+
+    setEditing(false);
+    setEditBusy(false);
+    await reload();
+    buzz();
+    toast(result.changed ? "تم حفظ التعديل" : "لا يوجد تغيير");
   }
 
   async function notifyWhatsApp() {
@@ -397,52 +454,118 @@ export default function TicketDetail() {
       </section>
 
       <section className="card mb-4 p-4">
-        <h2 className="mb-2 font-bold text-slate-900">القطعة</h2>
-        <dl className="space-y-1.5 text-sm">
-          {ticket.item_code && <Row label="الكود" value={ticket.item_code} />}
-          {ticket.item_type && <Row label="النوع" value={ticket.item_type} />}
-          {ticket.karat && <Row label="العيار" value={ticket.karat} />}
-          <Row label="الوزن عند الاستلام" value={formatWeight(ticket.weight_in_grams)} />
-          {ticket.weight_after_repair_grams !== null && (
-            <Row
-              label="الوزن بعد الصيانة"
-              value={`${formatWeight(ticket.weight_after_repair_grams)}${repairChange ? ` (${repairChange > 0 ? "+" : ""}${repairChange.toFixed(3)} غ بسبب الصيانة)` : ""}`}
-            />
+        <div className="mb-2 flex items-center justify-between">
+          <h2 className="font-bold text-slate-900">القطعة</h2>
+          {isOpen && !editing && (
+            <button type="button" onClick={startEdit} className="text-sm font-medium text-brand-700 hover:underline">
+              تعديل
+            </button>
           )}
-          {ticket.weight_out_grams !== null && <Row label="الوزن عند التسليم" value={formatWeight(ticket.weight_out_grams)} />}
-          <Row label="المصدر" value={ticket.item_source === "inventory" ? "من المخزون" : "إدخال يدوي"} />
-        </dl>
+        </div>
 
-        {variance !== null && (
-          <div className={`mt-3 rounded-lg px-3 py-2 text-sm ${
-            Math.abs(variance) <= tolerance ? "bg-brand-50 text-brand-800" : "bg-red-50 text-red-700"
-          }`}>
-            فرق التسليم عن {refLabel}: {variance > 0 ? "+" : ""}{variance.toFixed(3)} غ (المسموح ±{tolerance} غ)
-            {ticket.weight_variance_note && (
-              <span className="mt-1 block text-xs opacity-80">{ticket.weight_variance_note}</span>
-            )}
+        {editing ? (
+          <div className="space-y-3">
+            <div>
+              <label className="label" htmlFor="edit_item_name">اسم القطعة</label>
+              <input id="edit_item_name" className="field" value={editItemName} onChange={(e) => setEditItemName(e.target.value)} />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="label" htmlFor="edit_item_type">النوع</label>
+                <select id="edit_item_type" className="field" value={editItemType} onChange={(e) => setEditItemType(e.target.value)}>
+                  <option value="">—</option>
+                  {ITEM_TYPE_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="label" htmlFor="edit_karat">العيار</label>
+                <select id="edit_karat" className="field" value={editKarat} onChange={(e) => setEditKarat(e.target.value)}>
+                  <option value="">—</option>
+                  {KARAT_OPTIONS.map((k) => <option key={k} value={k}>{k}</option>)}
+                </select>
+              </div>
+            </div>
+            <div>
+              <label className="label" htmlFor="edit_weight">الوزن عند الاستلام (غرام)</label>
+              <input id="edit_weight" type="text" inputMode="decimal" dir="ltr" className="field text-left"
+                placeholder="0.000" value={editWeight} onChange={(e) => setEditWeight(normalizeDigits(e.target.value))} />
+            </div>
+            <div>
+              <label className="label" htmlFor="edit_problem">العمل المطلوب</label>
+              <textarea id="edit_problem" rows={3} className="field" value={editProblem} onChange={(e) => setEditProblem(e.target.value)} />
+            </div>
+            <div>
+              <label className="label" htmlFor="edit_cost">السعر التقريبي</label>
+              <input id="edit_cost" type="text" inputMode="decimal" dir="ltr" className="field text-left"
+                value={editCost} onChange={(e) => setEditCost(normalizeDigits(e.target.value))} />
+            </div>
+            <div>
+              <label className="label" htmlFor="edit_promised_at">موعد التسليم</label>
+              <input id="edit_promised_at" type="datetime-local" className="field" value={editPromisedAt}
+                onChange={(e) => setEditPromisedAt(e.target.value)} />
+            </div>
+
+            {editError && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{editError}</p>}
+
+            <div className="flex gap-2">
+              <button type="button" onClick={saveEdit} disabled={editBusy} className="btn-success flex-1 py-3">
+                {editBusy && <span className="spinner" />}
+                {editBusy ? "جارٍ الحفظ…" : "حفظ التعديل"}
+              </button>
+              <button type="button" onClick={() => setEditing(false)} className="btn-ghost flex-1 py-3">إلغاء</button>
+            </div>
           </div>
-        )}
-      </section>
-
-      <section className="card mb-4 p-4">
-        <h2 className="mb-2 font-bold text-slate-900">العمل المطلوب</h2>
-        <p className="whitespace-pre-wrap text-sm text-slate-700">{ticket.problem_description}</p>
-        {ticket.work_done && (
+        ) : (
           <>
-            <h3 className="mb-1 mt-3 text-sm font-semibold text-slate-900">ما تم تنفيذه</h3>
-            <p className="whitespace-pre-wrap text-sm text-slate-700">{ticket.work_done}</p>
+            <dl className="space-y-1.5 text-sm">
+              {ticket.item_code && <Row label="الكود" value={ticket.item_code} />}
+              {ticket.item_type && <Row label="النوع" value={ticket.item_type} />}
+              {ticket.karat && <Row label="العيار" value={ticket.karat} />}
+              <Row label="الوزن عند الاستلام" value={formatWeight(ticket.weight_in_grams)} />
+              {ticket.weight_after_repair_grams !== null && (
+                <Row
+                  label="الوزن بعد الصيانة"
+                  value={`${formatWeight(ticket.weight_after_repair_grams)}${repairChange ? ` (${repairChange > 0 ? "+" : ""}${repairChange.toFixed(3)} غ بسبب الصيانة)` : ""}`}
+                />
+              )}
+              {ticket.weight_out_grams !== null && <Row label="الوزن عند التسليم" value={formatWeight(ticket.weight_out_grams)} />}
+              <Row label="المصدر" value={ticket.item_source === "inventory" ? "من المخزون" : "إدخال يدوي"} />
+            </dl>
+
+            {variance !== null && (
+              <div className={`mt-3 rounded-lg px-3 py-2 text-sm ${
+                Math.abs(variance) <= tolerance ? "bg-brand-50 text-brand-800" : "bg-red-50 text-red-700"
+              }`}>
+                فرق التسليم عن {refLabel}: {variance > 0 ? "+" : ""}{variance.toFixed(3)} غ (المسموح ±{tolerance} غ)
+                {ticket.weight_variance_note && (
+                  <span className="mt-1 block text-xs opacity-80">{ticket.weight_variance_note}</span>
+                )}
+              </div>
+            )}
           </>
         )}
-        <dl className="mt-3 space-y-1.5 border-t border-slate-100 pt-3 text-sm">
-          <Row label="السعر التقريبي" value={formatMoney(ticket.estimated_cost)} />
-          {ticket.final_cost !== null && <Row label="السعر الحقيقي" value={formatMoney(ticket.final_cost)} />}
-          <Row label="الاستلام" value={formatDateTime(ticket.received_at)} />
-          <Row label="موعد التسليم" value={formatDateTime(ticket.promised_at)} />
-          {ticket.delivered_at && <Row label="سُلّمت" value={formatDateTime(ticket.delivered_at)} />}
-          {ticket.received_by_staff && <Row label="استلمها" value={ticket.received_by_staff.full_name} />}
-        </dl>
       </section>
+
+      {!editing && (
+        <section className="card mb-4 p-4">
+          <h2 className="mb-2 font-bold text-slate-900">العمل المطلوب</h2>
+          <p className="whitespace-pre-wrap text-sm text-slate-700">{ticket.problem_description}</p>
+          {ticket.work_done && (
+            <>
+              <h3 className="mb-1 mt-3 text-sm font-semibold text-slate-900">ما تم تنفيذه</h3>
+              <p className="whitespace-pre-wrap text-sm text-slate-700">{ticket.work_done}</p>
+            </>
+          )}
+          <dl className="mt-3 space-y-1.5 border-t border-slate-100 pt-3 text-sm">
+            <Row label="السعر التقريبي" value={formatMoney(ticket.estimated_cost)} />
+            {ticket.final_cost !== null && <Row label="السعر الحقيقي" value={formatMoney(ticket.final_cost)} />}
+            <Row label="الاستلام" value={formatDateTime(ticket.received_at)} />
+            <Row label="موعد التسليم" value={formatDateTime(ticket.promised_at)} />
+            {ticket.delivered_at && <Row label="سُلّمت" value={formatDateTime(ticket.delivered_at)} />}
+            {ticket.received_by_staff && <Row label="استلمها" value={ticket.received_by_staff.full_name} />}
+          </dl>
+        </section>
+      )}
 
 
       {/* ——— الصور ——— */}
@@ -478,9 +601,11 @@ export default function TicketDetail() {
         <ol className="space-y-3">
           {history.map((entry) => (
             <li key={entry.id} className="flex gap-3 text-sm">
-              <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${REPAIR_STATUS[entry.to_status].dot}`} />
+              <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${entry.from_status === entry.to_status ? "bg-slate-300" : REPAIR_STATUS[entry.to_status].dot}`} />
               <div>
-                <p className="font-medium text-slate-900">{REPAIR_STATUS[entry.to_status].label}</p>
+                <p className="font-medium text-slate-900">
+                  {entry.from_status === entry.to_status ? "✏️ تعديل بيانات" : REPAIR_STATUS[entry.to_status].label}
+                </p>
                 <p className="text-xs text-slate-500">
                   {formatDateTime(entry.created_at)}
                   {entry.staff?.full_name && ` · ${entry.staff.full_name}`}
@@ -498,6 +623,14 @@ export default function TicketDetail() {
       </div>
     </AppShell>
   );
+}
+
+/** لحقل datetime-local يحتاج توقيتاً محلياً بلا منطقة زمنية. */
+function toLocalInput(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 function Row({ label, value }: { label: string; value: string }) {

@@ -257,6 +257,76 @@ export async function createTicket(input: CreateTicketInput): Promise<TicketWith
   return ticket;
 }
 
+export type EditableTicketFields = {
+  item_name: string;
+  item_type: string | null;
+  karat: string | null;
+  weight_in_grams: number | null;
+  problem_description: string;
+  estimated_cost: number | null;
+  promised_at: string | null;
+};
+
+const EDITABLE_FIELD_LABELS: Record<keyof EditableTicketFields, string> = {
+  item_name: "اسم القطعة",
+  item_type: "النوع",
+  karat: "العيار",
+  weight_in_grams: "الوزن",
+  problem_description: "وصف العمل المطلوب",
+  estimated_cost: "السعر التقريبي",
+  promised_at: "موعد التسليم",
+};
+
+export type UpdateTicketResult = { ok: true; changed: boolean } | { ok: false; error: string };
+
+/**
+ * تعديل بيانات تذكرة مفتوحة — مثلاً لو الزبون زاد قطعة صغيرة أو طلب لحاماً إضافياً
+ * بعد فتح التذكرة. لا يُسمح به بعد التسليم أو الإلغاء، ويُسجَّل كحدث في السجل
+ * (نفس حالة البداية والنهاية = تعديل بلا تغيير حالة) حتى يبقى أثره واضحاً.
+ */
+export async function updateTicketDetails(
+  ticketId: string,
+  staffId: string,
+  fields: Partial<EditableTicketFields>,
+): Promise<UpdateTicketResult> {
+  const ticket = await getTicket(ticketId);
+  if (!ticket) return { ok: false, error: "التذكرة غير موجودة" };
+  if (!OPEN_STATUSES.includes(ticket.status)) {
+    return { ok: false, error: "لا يمكن تعديل تذكرة مسلّمة أو ملغاة" };
+  }
+
+  const update: Record<string, unknown> = {};
+  const changeLines: string[] = [];
+  for (const key of Object.keys(fields) as (keyof EditableTicketFields)[]) {
+    const nextValue = fields[key];
+    if (nextValue === undefined) continue;
+    const prevValue = ticket[key];
+    if (nextValue === prevValue) continue;
+    update[key] = nextValue;
+    const label = EDITABLE_FIELD_LABELS[key];
+    if (key === "problem_description") changeLines.push("تعديل وصف العمل المطلوب");
+    else if (key === "weight_in_grams") changeLines.push(`${label}: ${prevValue ?? "—"} غ ← ${nextValue ?? "—"} غ`);
+    else changeLines.push(`${label}: ${prevValue ?? "—"} ← ${nextValue ?? "—"}`);
+  }
+
+  if (Object.keys(update).length === 0) return { ok: true, changed: false };
+
+  const { error } = await supabase.from("repair_tickets").update(update).eq("id", ticketId);
+  if (error) return { ok: false, error: error.message };
+
+  await supabase.from("repair_status_history").insert({
+    ticket_id: ticketId,
+    from_status: ticket.status,
+    to_status: ticket.status,
+    note: changeLines.join("، "),
+    changed_by: staffId,
+  });
+
+  void syncTickets({ ticketIds: [ticketId] });
+
+  return { ok: true, changed: true };
+}
+
 export type WeightCheck = { tolerance: number; difference: number; withinTolerance: boolean };
 
 export function checkWeight(weightIn: number, weightOut: number, tolerance: number): WeightCheck {
