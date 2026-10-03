@@ -13,7 +13,7 @@ import {
 import { REPAIR_STATUS, PHOTO_STAGE, ALLOWED_TRANSITIONS, PRIMARY_NEXT, OPEN_STATUSES, KARAT_OPTIONS, ITEM_TYPE_OPTIONS, normalizeDigits } from "@/lib/constants";
 import { formatDateTime, formatWeight, formatMoney, overdueLabel, daysFromNow } from "@/lib/format";
 import { trackingUrl } from "@/lib/qr";
-import { compressImages } from "@/lib/image";
+import { compressImages, makeThumbnail } from "@/lib/image";
 import { notifyCustomer, defaultKind } from "@/lib/whatsapp";
 import type { RepairStatus, TicketWithRelations, StatusHistoryEntry, RepairPhoto } from "@/lib/types";
 
@@ -64,7 +64,7 @@ export default function TicketDetail() {
     setHistory(h);
     setPhotos(p);
     setSettings(s);
-    setUrls(await signedPhotoUrls(p.map((x) => x.storage_path)));
+    setUrls(await signedPhotoUrls(p.flatMap((x) => (x.thumb_path ? [x.storage_path, x.thumb_path] : [x.storage_path]))));
     setDeliveredTo(t?.customer?.full_name ?? "");
     if (t?.status === "delivered") {
       const { data: fb } = await supabase.from("repair_feedback").select("rating, comment").eq("ticket_id", t.id).maybeSingle();
@@ -230,9 +230,19 @@ export default function TicketDetail() {
         contentType: file.type || "image/jpeg",
       });
       if (error) continue;
+
+      const thumb = await makeThumbnail(file);
+      let thumbPath: string | null = null;
+      if (thumb) {
+        const tPath = `${ticket.id}/${stage}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}-thumb.jpg`;
+        const { error: thumbErr } = await supabase.storage.from(PHOTO_BUCKET).upload(tPath, thumb, { contentType: "image/jpeg" });
+        if (!thumbErr) thumbPath = tPath;
+      }
+
       await supabase.from("repair_photos").insert({
         ticket_id: ticket.id,
         storage_path: path,
+        thumb_path: thumbPath,
         stage,
         uploaded_by: staff.staff_id,
         is_public: stage !== "progress",
@@ -594,7 +604,13 @@ export default function TicketDetail() {
             {photos.map((photo) => (
               <a key={photo.id} href={urls[photo.storage_path]} target="_blank" rel="noreferrer"
                 className="block overflow-hidden rounded-lg border border-slate-200">
-                <img src={urls[photo.storage_path]} alt={PHOTO_STAGE[photo.stage]} className="aspect-square w-full object-cover" />
+                <img
+                  src={urls[photo.thumb_path ?? photo.storage_path]}
+                  alt={PHOTO_STAGE[photo.stage]}
+                  loading="lazy"
+                  decoding="async"
+                  className="aspect-square w-full object-cover"
+                />
                 <span className="block bg-slate-50 px-1 py-0.5 text-center text-[10px] text-slate-500">
                   {PHOTO_STAGE[photo.stage]}
                 </span>

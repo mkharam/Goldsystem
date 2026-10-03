@@ -70,6 +70,8 @@ export type RepairPhoto = {
   id: string;
   ticket_id: string;
   storage_path: string;
+  /** مصغّرة للعرض في القوائم والمعرض — null لصور قديمة قبل إضافة هذا الحقل. */
+  thumb_path: string | null;
   stage: PhotoStage;
   caption: string | null;
   is_public: boolean;

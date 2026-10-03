@@ -24,12 +24,12 @@ export type TicketFilters = {
   range?: { field: "received_at" | "ready_at" | "delivered_at" | "promised_at"; from: string; to: string };
 };
 
-type PhotoRef = { storage_path: string; stage: string; created_at: string };
+type PhotoRef = { storage_path: string; thumb_path: string | null; stage: string; created_at: string };
 
 export async function listTickets(filters: TicketFilters = {}): Promise<TicketWithRelations[]> {
   // صور القطعة مع التذكرة في نفس الطلب، لتظهر مصغّرة في بطاقات القائمة.
   let query = supabase.from("repair_tickets").select(
-    `${TICKET_SELECT}, photos:repair_photos!repair_photos_ticket_id_fkey (storage_path, stage, created_at)`,
+    `${TICKET_SELECT}, photos:repair_photos!repair_photos_ticket_id_fkey (storage_path, thumb_path, stage, created_at)`,
   );
 
   if (filters.status === "open") query = query.in("status", OPEN_STATUSES);
@@ -99,7 +99,8 @@ export async function listTickets(filters: TicketFilters = {}): Promise<TicketWi
   for (const t of rows) {
     const photos = [...(t.photos ?? [])].sort((a, b) => a.created_at.localeCompare(b.created_at));
     const first = photos.find((p) => p.stage === "intake") ?? photos[0];
-    if (first) firstPath.set(t.id, first.storage_path);
+    // المصغّرة إن وُجدت — أخف بكثير من الصورة الكاملة في قائمة فيها عدة تذاكر معاً.
+    if (first) firstPath.set(t.id, first.thumb_path ?? first.storage_path);
   }
   const urls = await signedPhotoUrls(Array.from(firstPath.values()));
   return rows.map(({ photos: _photos, ...t }) => ({ ...t, photo_url: urls[firstPath.get(t.id) ?? ""] ?? null }));

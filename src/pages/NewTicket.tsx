@@ -12,7 +12,7 @@ import {
 } from "@/lib/tickets";
 import { KARAT_OPTIONS, ITEM_TYPE_OPTIONS, normalizeDigits } from "@/lib/constants";
 import { loadDraft, saveDraft, clearDraft, saveItemFiles, loadItemFiles } from "@/lib/draft";
-import { compressImages } from "@/lib/image";
+import { compressImages, makeThumbnail } from "@/lib/image";
 
 type Branch = { id: string; name: string; code: string | null };
 
@@ -220,9 +220,19 @@ export default function NewTicket() {
       // صورة فاشلة لا تُسقط التذكرة — تُرفع لاحقاً من صفحة التفاصيل.
       if (upErr) continue;
 
+      // مصغّرة منفصلة للقوائم (بطاقة التذكرة) — فشلها لا يمنع حفظ الصورة الكاملة.
+      const thumb = await makeThumbnail(file);
+      let thumbPath: string | null = null;
+      if (thumb) {
+        const tPath = `${ticketId}/intake-${Date.now()}-${Math.random().toString(36).slice(2, 8)}-thumb.jpg`;
+        const { error: thumbErr } = await supabase.storage.from(PHOTO_BUCKET).upload(tPath, thumb, { contentType: "image/jpeg" });
+        if (!thumbErr) thumbPath = tPath;
+      }
+
       await supabase.from("repair_photos").insert({
         ticket_id: ticketId,
         storage_path: path,
+        thumb_path: thumbPath,
         stage: "intake",
         uploaded_by: staff!.staff_id,
         is_public: true,
