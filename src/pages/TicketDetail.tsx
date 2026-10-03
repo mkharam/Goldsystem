@@ -40,7 +40,6 @@ export default function TicketDetail() {
   const [note, setNote] = useState("");
   const [deliveredTo, setDeliveredTo] = useState("");
   const [varianceNote, setVarianceNote] = useState("");
-  const [acceptVariance, setAcceptVariance] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [showOther, setShowOther] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -149,7 +148,6 @@ export default function TicketDetail() {
       weightAfter: target === "ready" && weightAfter.trim() ? Number(normalizeDigits(weightAfter)) : undefined,
       deliveredToName: deliveredTo.trim() || null,
       varianceNote: varianceNote.trim() || null,
-      acceptVariance,
     });
 
     if (!result.ok) {
@@ -159,7 +157,7 @@ export default function TicketDetail() {
     }
 
     setTarget(null);
-    setWeightOut(""); setWeightAfter(""); setWorkDone(""); setFinalCost(""); setNote(""); setVarianceNote(""); setAcceptVariance(false);
+    setWeightOut(""); setWeightAfter(""); setWorkDone(""); setFinalCost(""); setNote(""); setVarianceNote("");
     await reload();
     setBusy(false);
     buzz();
@@ -382,29 +380,18 @@ export default function TicketDetail() {
                         <label className="label" htmlFor="weight_out">الوزن عند التسليم (غرام)</label>
                         <input id="weight_out" type="text" inputMode="decimal" dir="ltr" className="field text-left"
                           placeholder="0.000" value={weightOut} onChange={(e) => setWeightOut(normalizeDigits(e.target.value))} />
-                        <p className="mt-1 text-xs text-slate-500">
-                          {refLabel} {weightRef?.toFixed(3)} غ — المسموح ±{tolerance} غ
-                        </p>
+                        <p className="mt-1 text-xs text-slate-500">{refLabel} {weightRef?.toFixed(3)} غ</p>
 
-                        {liveCheck && (
-                          <div className={`mt-2 rounded-lg px-3 py-2 text-sm ${
-                            liveCheck.withinTolerance ? "bg-brand-50 text-brand-800" : "bg-red-50 text-red-700"
-                          }`}>
+                        {/* الفرق معلومة للموظف فقط — لا يمنع التسليم، وهو من يقرر إن احتاج ملاحظة. */}
+                        {liveCheck && liveCheck.difference !== 0 && (
+                          <div className="mt-2 rounded-lg bg-gold-50 px-3 py-2 text-sm text-gold-800">
                             الفرق: {liveCheck.difference > 0 ? "+" : ""}{liveCheck.difference.toFixed(3)} غ
-                            {liveCheck.withinTolerance ? " — ضمن المسموح" : " — يتجاوز المسموح"}
                           </div>
                         )}
 
-                        {liveCheck && !liveCheck.withinTolerance && (
-                          <div className="mt-2 rounded-lg border border-red-200 bg-red-50 p-3">
-                            <label className="flex items-start gap-2 text-sm text-red-800">
-                              <input type="checkbox" className="mt-1" checked={acceptVariance}
-                                onChange={(e) => setAcceptVariance(e.target.checked)} />
-                              <span>أؤكّد التسليم رغم فرق الوزن</span>
-                            </label>
-                            <input className="field mt-2" placeholder="سبب الفرق (مثال: استبدال فص، إزالة لحام)"
-                              value={varianceNote} onChange={(e) => setVarianceNote(e.target.value)} />
-                          </div>
+                        {liveCheck && liveCheck.difference !== 0 && (
+                          <input className="field mt-2" placeholder="سبب الفرق (اختياري — مثال: استبدال فص، إزالة لحام)"
+                            value={varianceNote} onChange={(e) => setVarianceNote(e.target.value)} />
                         )}
                       </div>
                     )}
@@ -558,11 +545,9 @@ export default function TicketDetail() {
               <Row label="المصدر" value={ticket.item_source === "inventory" ? "من المخزون" : "إدخال يدوي"} />
             </dl>
 
-            {variance !== null && (
-              <div className={`mt-3 rounded-lg px-3 py-2 text-sm ${
-                Math.abs(variance) <= tolerance ? "bg-brand-50 text-brand-800" : "bg-red-50 text-red-700"
-              }`}>
-                فرق التسليم عن {refLabel}: {variance > 0 ? "+" : ""}{variance.toFixed(3)} غ (المسموح ±{tolerance} غ)
+            {variance !== null && variance !== 0 && (
+              <div className="mt-3 rounded-lg bg-gold-50 px-3 py-2 text-sm text-gold-800">
+                فرق التسليم عن {refLabel}: {variance > 0 ? "+" : ""}{variance.toFixed(3)} غ
                 {ticket.weight_variance_note && (
                   <span className="mt-1 block text-xs opacity-80">{ticket.weight_variance_note}</span>
                 )}

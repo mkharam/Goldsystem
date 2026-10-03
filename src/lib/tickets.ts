@@ -348,10 +348,9 @@ export type TransitionInput = {
   weightAfter?: number | null;
   deliveredToName?: string | null;
   varianceNote?: string | null;
-  acceptVariance?: boolean;
 };
 
-export type TransitionResult = { ok: true } | { ok: false; error: string; weightCheck?: WeightCheck };
+export type TransitionResult = { ok: true } | { ok: false; error: string };
 
 export async function transitionTicket(input: TransitionInput): Promise<TransitionResult> {
   const ticket = await getTicket(input.ticketId);
@@ -384,9 +383,9 @@ export async function transitionTicket(input: TransitionInput): Promise<Transiti
   }
 
   if (input.to === "delivered") {
-    // التسليم هو اللحظة التي يجب أن تُوزن فيها القطعة؛ لا تجاوز لفرق الوزن إلا
-    // بقرار صريح من الموظف مع سبب مكتوب. المرجع وزنها بعد الصيانة (لا وزن الاستلام)،
-    // وتذاكر جُهّزت قبل تسجيله تبقى على وزن الاستلام.
+    // التسليم هو اللحظة التي يجب أن تُوزن فيها القطعة. الفرق عن وزنها بعد
+    // الصيانة (أو وزن الاستلام إن لم تُوزن بعد الصيانة) لا يمنع التسليم —
+    // يُعرض للموظف وهو من يقرر إن استحقّ ملاحظة، لا النظام.
     const weightRef = ticket.weight_after_repair_grams ?? ticket.weight_in_grams;
     if (weightRef !== null) {
       if (input.weightOut === null || input.weightOut === undefined) {
@@ -394,10 +393,7 @@ export async function transitionTicket(input: TransitionInput): Promise<Transiti
       }
 
       const check = checkWeight(weightRef, input.weightOut, input.tolerance);
-      if (!check.withinTolerance && !input.acceptVariance) {
-        return { ok: false, error: "فرق الوزن يتجاوز المسموح", weightCheck: check };
-      }
-      if (!check.withinTolerance) {
+      if (check.difference !== 0) {
         update.weight_variance_accepted_by = input.staffId;
         update.weight_variance_note = input.varianceNote ?? null;
       }
