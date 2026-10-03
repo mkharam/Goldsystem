@@ -30,6 +30,16 @@ function PlusIcon() {
   );
 }
 
+function BellIcon({ active }: { active: boolean }) {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" strokeWidth={active ? 2.4 : 2}>
+      <path d="M6 10.5a6 6 0 1 1 12 0c0 3 .8 4.6 1.6 5.6a.8.8 0 0 1-.6 1.3H5a.8.8 0 0 1-.6-1.3C5.2 15.1 6 13.5 6 10.5Z"
+        stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M9.5 19.5a2.5 2.5 0 0 0 5 0" stroke="currentColor" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 export function AppShell({
   children,
   inventoryDown,
@@ -43,6 +53,7 @@ export function AppShell({
   const onHome = pathname === "/";
   const onNew = pathname === "/tickets/new";
   const onCalendar = pathname === "/calendar";
+  const onNotify = pathname === "/notify";
   const [theme, toggleTheme] = useTheme();
 
   return (
@@ -108,39 +119,49 @@ export function AppShell({
         style={{ paddingBottom: "max(env(safe-area-inset-bottom), 22px)" }}
       >
         <div className="brand-hairline" />
-        {/* ثلاث صفحات: الرئيسية (كل التذاكر والبحث)، التقويم، واستلام قطعة. */}
-        <div className="mx-auto grid max-w-3xl grid-cols-3 items-center gap-2 px-3 pb-1 pt-2.5">
+        {/* أربع صفحات: الرئيسية (كل التذاكر والبحث)، إبلاغ الزبون، التقويم، واستلام قطعة. */}
+        <div className="mx-auto grid max-w-3xl grid-cols-4 items-center gap-1.5 px-3 pb-1 pt-2.5">
           <Link
             to="/"
-            className={`flex items-center justify-center gap-2 rounded-xl py-3 transition active:scale-95 ${
+            className={`flex flex-col items-center justify-center gap-1 rounded-xl py-2.5 transition active:scale-95 ${
               onHome ? "bg-white/10 text-gold-200 ring-1 ring-gold-500/40" : "text-gold-100/55"
             }`}
           >
             <HomeIcon active={onHome} />
-            <span className={`text-sm ${onHome ? "font-bold" : "font-medium"}`}>الرئيسية</span>
+            <span className={`text-xs ${onHome ? "font-bold" : "font-medium"}`}>الرئيسية</span>
+          </Link>
+
+          <Link
+            to="/notify"
+            className={`flex flex-col items-center justify-center gap-1 rounded-xl py-2.5 transition active:scale-95 ${
+              onNotify ? "bg-white/10 text-gold-200 ring-1 ring-gold-500/40" : "text-gold-100/55"
+            }`}
+          >
+            <BellIcon active={onNotify} />
+            <span className={`text-xs ${onNotify ? "font-bold" : "font-medium"}`}>إبلاغ</span>
           </Link>
 
           <Link
             to="/calendar"
-            className={`flex items-center justify-center gap-2 rounded-xl py-3 transition active:scale-95 ${
+            className={`flex flex-col items-center justify-center gap-1 rounded-xl py-2.5 transition active:scale-95 ${
               onCalendar ? "bg-white/10 text-gold-200 ring-1 ring-gold-500/40" : "text-gold-100/55"
             }`}
           >
             <CalendarIcon active={onCalendar} />
-            <span className={`text-sm ${onCalendar ? "font-bold" : "font-medium"}`}>التقويم</span>
+            <span className={`text-xs ${onCalendar ? "font-bold" : "font-medium"}`}>التقويم</span>
           </Link>
 
           {/* زر الاستلام بالذهبي — أكثر إجراء يتكرّر في اليوم. */}
           <Link
             to="/tickets/new"
-            className={`flex items-center justify-center gap-1.5 rounded-xl py-3 font-bold shadow-[0_6px_18px_-6px_rgba(201,162,74,0.7)] transition active:scale-95 ${
+            className={`flex flex-col items-center justify-center gap-1 rounded-xl py-2.5 font-bold shadow-[0_6px_18px_-6px_rgba(201,162,74,0.7)] transition active:scale-95 ${
               onNew
                 ? "bg-gold-100 text-brand-900 ring-2 ring-gold-400"
                 : "bg-gradient-to-l from-gold-600 via-gold-400 to-gold-600 text-brand-950"
             }`}
           >
             <PlusIcon />
-            <span className="text-sm">استلام قطعة</span>
+            <span className="text-xs">استلام</span>
           </Link>
         </div>
       </nav>
