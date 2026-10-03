@@ -252,6 +252,20 @@ export default function TicketDetail() {
         <StatusBadge status={ticket.status} />
       </div>
 
+      {ticket.customer && (
+        <Link
+          to={`/tickets/new?${new URLSearchParams({
+            customerId: ticket.customer.id,
+            customerName: ticket.customer.full_name,
+            phone: ticket.customer.phone ?? "",
+            branchId: ticket.branch_id,
+          }).toString()}`}
+          className="btn-ghost mb-4 w-full border-dashed"
+        >
+          + قطعة أخرى لنفس الزبون
+        </Link>
+      )}
+
       {isOverdue && (
         <p className="mb-4 rounded-lg bg-red-50 px-3 py-2.5 text-sm font-medium text-red-700">
           {overdueLabel(ticket.promised_at)} — موعدها {formatDateTime(ticket.promised_at)}

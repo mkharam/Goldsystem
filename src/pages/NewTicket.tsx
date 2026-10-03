@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { AppShell } from "@/components/AppShell";
 import { Steps } from "@/components/Steps";
 import { useAuth } from "@/lib/auth";
@@ -54,6 +54,7 @@ function defaultPromisedAt(days: number): string {
 export default function NewTicket() {
   const { staff } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   const [step, setStep] = useState(0);
   const [branches, setBranches] = useState<Branch[]>([]);
@@ -120,6 +121,21 @@ export default function NewTicket() {
       setItems((list) => list.map((it) => (byKey.get(it.key)?.length ? { ...it, files: byKey.get(it.key)! } : it)));
     });
   }, []);
+
+  // قادم من "قطعة أخرى لنفس الزبون" في صفحة تذكرة قائمة: الزبون معروف، فنبدأ من خطوة القطع
+  // مباشرة. لا نطبّق هذا فوق مسودّة مستعادة حتى لا نضيع ما كان الموظف يكتبه.
+  useEffect(() => {
+    if (!draftReady || restored) return;
+    const cid = searchParams.get("customerId");
+    if (!cid) return;
+    setCustomerId(cid);
+    setCustomerName(searchParams.get("customerName") ?? "");
+    setPhone(searchParams.get("phone") ?? "");
+    const bid = searchParams.get("branchId");
+    if (bid) setBranchId(bid);
+    setStep(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftReady, restored]);
 
   useEffect(() => {
     if (!draftReady) return;
