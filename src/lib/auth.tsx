@@ -150,6 +150,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function signOut() {
+    try { localStorage.removeItem("mkh-photo-urls-v1"); } catch { /* ignore */ }
     await supabase.auth.signOut();
     setStaff(null);
   }

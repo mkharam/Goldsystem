@@ -216,6 +216,7 @@ export default function NewTicket() {
 
       const { error: upErr } = await supabase.storage.from(PHOTO_BUCKET).upload(path, file, {
         contentType: file.type || "image/jpeg",
+        cacheControl: "31536000",
       });
       // صورة فاشلة لا تُسقط التذكرة — تُرفع لاحقاً من صفحة التفاصيل.
       if (upErr) continue;
@@ -225,7 +226,7 @@ export default function NewTicket() {
       let thumbPath: string | null = null;
       if (thumb) {
         const tPath = `${ticketId}/intake-${Date.now()}-${Math.random().toString(36).slice(2, 8)}-thumb.jpg`;
-        const { error: thumbErr } = await supabase.storage.from(PHOTO_BUCKET).upload(tPath, thumb, { contentType: "image/jpeg" });
+        const { error: thumbErr } = await supabase.storage.from(PHOTO_BUCKET).upload(tPath, thumb, { contentType: "image/jpeg", cacheControl: "31536000" });
         if (!thumbErr) thumbPath = tPath;
       }
 
