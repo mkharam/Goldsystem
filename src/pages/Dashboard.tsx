@@ -10,6 +10,7 @@ import { REPAIR_STATUS } from "@/lib/constants";
 import { parseSmartSearch } from "@/lib/smartSearch";
 import { supabase } from "@/lib/supabase";
 import { notifyCustomer } from "@/lib/whatsapp";
+import { backfillThumbnails } from "@/lib/photos";
 import { inventoryHealth, syncTickets } from "@/lib/inventory";
 import { useToast } from "@/lib/toast";
 import type { RepairStatus, TicketWithRelations } from "@/lib/types";
@@ -108,6 +109,9 @@ export default function Dashboard() {
       active = false;
     };
   }, [branch]);
+
+  // مصغّرات الصور القديمة تُولَّد في الخلفية مرة واحدة، ثم تخفّ القائمة بعد التحديث.
+  useEffect(() => { void backfillThumbnails(); }, []);
 
   // تغيير التبويب أو البحث أو الفرع يبدأ القائمة من أولها.
   useEffect(() => setLimit(PAGE), [tab, search, branch]);

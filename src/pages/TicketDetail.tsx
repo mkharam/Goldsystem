@@ -65,32 +65,6 @@ export default function TicketDetail() {
     setSettings(s);
     const signed = await signedPhotoUrls(p.flatMap((x) => (x.thumb_path ? [x.storage_path, x.thumb_path] : [x.storage_path])));
     setUrls(signed);
-    // صور رُفعت قبل المصغّرات: نولّد مصغّرتها مرة واحدة في الخلفية، فتخفّ في كل زيارة لاحقة.
-    const legacy = p.filter((x) => !x.thumb_path && signed[x.storage_path]);
-    if (legacy.length) {
-      void (async () => {
-        let made = 0;
-        for (const photo of legacy) {
-          try {
-            const blob = await (await fetch(signed[photo.storage_path])).blob();
-            const thumb = await makeThumbnail(new File([blob], "photo.jpg", { type: blob.type || "image/jpeg" }));
-            if (!thumb) continue;
-            const tPath = photo.storage_path.replace(/\.\w+$/, "") + "-thumb.jpg";
-            const { error: upErr } = await supabase.storage.from(PHOTO_BUCKET).upload(tPath, thumb, {
-              contentType: "image/jpeg", cacheControl: "31536000", upsert: true,
-            });
-            if (upErr) continue;
-            const { error: rowErr } = await supabase.from("repair_photos").update({ thumb_path: tPath }).eq("id", photo.id);
-            if (!rowErr) made++;
-          } catch { /* تبقى بلا مصغّرة وتُعرض كاملة */ }
-        }
-        if (made > 0) {
-          const fresh = await getPhotos(id);
-          setPhotos(fresh);
-          setUrls(await signedPhotoUrls(fresh.flatMap((x) => (x.thumb_path ? [x.storage_path, x.thumb_path] : [x.storage_path]))));
-        }
-      })();
-    }
     setDeliveredTo(t?.customer?.full_name ?? "");
     if (t?.status === "delivered") {
       const { data: fb } = await supabase.from("repair_feedback").select("rating, comment").eq("ticket_id", t.id).maybeSingle();
@@ -617,13 +591,18 @@ export default function TicketDetail() {
             {photos.map((photo) => (
               <a key={photo.id} href={urls[photo.storage_path]} target="_blank" rel="noreferrer"
                 className="block overflow-hidden rounded-lg border border-slate-200">
-                <img
-                  src={urls[photo.thumb_path ?? photo.storage_path]}
-                  alt={PHOTO_STAGE[photo.stage]}
-                  loading="lazy"
-                  decoding="async"
-                  className="aspect-square w-full object-cover"
-                />
+<div
+                  className="aspect-square w-full bg-slate-100 bg-cover bg-center"
+                  style={photo.thumb_path && urls[photo.thumb_path] ? { backgroundImage: `url(${urls[photo.thumb_path]})` } : undefined}
+                >
+                  <img
+                    src={urls[photo.storage_path]}
+                    alt={PHOTO_STAGE[photo.stage]}
+                    loading="lazy"
+                    decoding="async"
+                    className="h-full w-full object-cover"
+                  />
+                </div>
                 <span className="block bg-slate-50 px-1 py-0.5 text-center text-[10px] text-slate-500">
                   {PHOTO_STAGE[photo.stage]}
                 </span>
