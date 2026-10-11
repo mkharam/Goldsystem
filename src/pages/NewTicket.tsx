@@ -73,8 +73,7 @@ export default function NewTicket() {
   const [customerId, setCustomerId] = useState("");
   // بحث موحّد عن زبون مسجّل: يكتب الموظف اسماً أو رقماً في خانة واحدة.
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<CustomerMatch[]>([]);
-  const [searching, setSearching] = useState(false);
+
 
   // زبون بأكثر من قطعة: كل قطعة ببياناتها. تبدأ بقطعة واحدة، ويزيد الموظف العدد بزر.
   const [items, setItems] = useState<Item[]>([newItem()]);
@@ -222,34 +221,17 @@ export default function NewTicket() {
     return () => { active = false; };
   }, [branchId, staff]);
 
-  // الأرقام فقط ← بحث بالهاتف (محلياً وفي المخزون)؛ فيه حروف ← بحث بالاسم. بمهلة قصيرة أثناء الكتابة.
-  useEffect(() => {
-    const q = query.trim();
-    const digits = normalizeDigits(q).replace(/\D/g, "");
-    const isNumber = q !== "" && /^[\d\s+\-٠-٩۰-۹]+$/.test(q);
-    if (customerId || (isNumber ? digits.length < 3 : q.length < 2)) {
-      setResults([]);
-      setSearching(false);
-      return;
-    }
-    setSearching(true);
-    let active = true;
-    const timer = setTimeout(() => {
-      (isNumber ? searchCustomers(digits) : searchCustomersByName(q))
-        .then((r) => active && setResults(r))
-        .catch(() => active && setResults([]))
-        .finally(() => active && setSearching(false));
-    }, 350);
-    return () => { active = false; clearTimeout(timer); };
-  }, [query, customerId]);
-
   function pickCustomer(m: CustomerMatch) {
     setCustomerId(m.id);
     setCustomerName(m.full_name);
     setPhone(m.phone);
     setQuery("");
-    setResults([]);
   }
+  // الاقتراحات تظهر من أي حقل يكتب فيه الموظف: خانة البحث أو الهاتف أو الاسم.
+  const searchBox = useCustomerMatches(query, !!customerId);
+  const phoneBox = useCustomerMatches(phone, !!customerId);
+  const nameBox = useCustomerMatches(customerName, !!customerId);
+
 
   async function uploadPhotos(ticketId: string, files: File[]) {
     for (const file of files) {
@@ -407,8 +389,8 @@ export default function NewTicket() {
                   <path d="m20 20-3.2-3.2" stroke="currentColor" strokeLinecap="round" />
                 </svg>
               </div>
-              {results.length > 0 && <CustomerSuggestions items={results} onPick={pickCustomer} />}
-              {results.length === 0 && !searching && !customerId && query.trim().length >= 2 && (
+              {searchBox.results.length > 0 && <CustomerSuggestions items={searchBox.results} onPick={pickCustomer} />}
+              {searchBox.results.length === 0 && !searchBox.searching && !customerId && query.trim().length >= 2 && (
                 <p className="mt-1.5 text-xs text-slate-500">لا يوجد زبون بهذا — أضفه جديداً في الخانتين تحت.</p>
               )}
             </div>
@@ -433,6 +415,7 @@ export default function NewTicket() {
                       if (customerId) setCustomerId("");
                     }}
                   />
+                  {phoneBox.results.length > 0 && <CustomerSuggestions items={phoneBox.results} onPick={pickCustomer} />}
                 </div>
                 <div>
                   <label className="label text-base" htmlFor="customer_name">اسم الزبون</label>
@@ -446,6 +429,7 @@ export default function NewTicket() {
                       if (customerId) setCustomerId("");
                     }}
                   />
+                  {nameBox.results.length > 0 && <CustomerSuggestions items={nameBox.results} onPick={pickCustomer} />}
                 </div>
               </div>
             </div>
@@ -629,6 +613,37 @@ export default function NewTicket() {
       </div>
     </AppShell>
   );
+}
+
+/**
+ * يبحث عن زبون مسجّل بما يُكتب في حقل: أرقام فقط ← بالهاتف (محلياً وفي المخزون)، وفيه حروف
+ * ← بالاسم. بمهلة قصيرة أثناء الكتابة، ويتوقف حين يكون الزبون مختاراً.
+ */
+function useCustomerMatches(text: string, disabled: boolean) {
+  const [results, setResults] = useState<CustomerMatch[]>([]);
+  const [searching, setSearching] = useState(false);
+
+  useEffect(() => {
+    const q = text.trim();
+    const digits = normalizeDigits(q).replace(/\D/g, "");
+    const isNumber = q !== "" && /^[\d\s+\-٠-٩۰-۹]+$/.test(q);
+    if (disabled || (isNumber ? digits.length < 3 : q.length < 2)) {
+      setResults([]);
+      setSearching(false);
+      return;
+    }
+    setSearching(true);
+    let active = true;
+    const timer = setTimeout(() => {
+      (isNumber ? searchCustomers(digits) : searchCustomersByName(q))
+        .then((r) => active && setResults(r))
+        .catch(() => active && setResults([]))
+        .finally(() => active && setSearching(false));
+    }, 350);
+    return () => { active = false; clearTimeout(timer); };
+  }, [text, disabled]);
+
+  return { results, searching };
 }
 
 /** اقتراحات الزبون المسجّل: قائمة داخل مسار الصفحة (لا تطفو فوق الحقول) تدفع ما تحتها للأسفل. */
