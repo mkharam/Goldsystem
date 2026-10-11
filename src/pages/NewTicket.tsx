@@ -199,8 +199,8 @@ export default function NewTicket() {
     })();
   }, [staff]);
 
-  // موظفو الفرع المختار فقط — المسؤول قد يغيب فيستلم زميل من الفرع نفسه، والحساب المفتوح
-  // في النظام يبقى كما هو. من سجّل الدخول في القائمة دائماً (المدير العام قد لا يتبع فرعاً).
+  // موظفو الفرع المختار، كلهم سواء: الحساب المفتوح في النظام حساب الفرع، لا يعني أن صاحبه
+  // هو المستلم، فيختار الموظف اسم من استلم القطعة فعلاً.
   useEffect(() => {
     if (!branchId || !staff) return;
     let active = true;
@@ -213,9 +213,8 @@ export default function NewTicket() {
       .then(({ data }) => {
         if (!active) return;
         const list = data ?? [];
-        if (!list.some((m) => m.id === staff.staff_id)) list.unshift({ id: staff.staff_id, full_name: staff.full_name, branch_id: staff.branch_id });
         setBranchStaff(list);
-        setReceivedBy((current) => (current && list.some((m) => m.id === current) ? current : staff.staff_id));
+        setReceivedBy((current) => (list.some((m) => m.id === current) ? current : ""));
       });
     return () => { active = false; };
   }, [branchId, staff]);
@@ -291,6 +290,7 @@ export default function NewTicket() {
   async function onSave() {
     setError(null);
     if (!branchId) return setError("اختر الفرع");
+    if (branchStaff.length > 0 && !receivedBy) return setError("اختر الموظف الذي استلم القطعة");
 
     setBusy(true);
     try {
@@ -519,8 +519,9 @@ export default function NewTicket() {
             <div>
               <label className="label" htmlFor="received_by">المستلم</label>
               <select id="received_by" className="field" value={receivedBy} onChange={(e) => setReceivedBy(e.target.value)}>
+                <option value="">اختر المستلم…</option>
                 {branchStaff.map((m) => (
-                  <option key={m.id} value={m.id}>{m.full_name}{m.id === staff?.staff_id ? " (أنا)" : ""}</option>
+                  <option key={m.id} value={m.id}>{m.full_name}</option>
                 ))}
               </select>
             </div>
@@ -534,7 +535,7 @@ export default function NewTicket() {
                 <Line label="الزبون" value={`${customerName || "—"} · ${phone || "—"}`} />
                 <Line label="التسليم" value={promisedLabel} />
                 <Line label="الفرع" value={branchName ?? "—"} />
-                <Line label="المستلم" value={branchStaff.find((m) => m.id === receivedBy)?.full_name ?? staff?.full_name ?? "—"} />
+                <Line label="المستلم" value={branchStaff.find((m) => m.id === receivedBy)?.full_name ?? "—"} />
               </dl>
               <ol className="mt-2 space-y-1.5 border-t border-slate-200 pt-2">
                 {items.map((it, i) => (
