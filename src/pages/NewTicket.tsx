@@ -71,8 +71,10 @@ export default function NewTicket() {
   const [phone, setPhone] = useState("");
   const [customerName, setCustomerName] = useState("");
   const [customerId, setCustomerId] = useState("");
-  const [matches, setMatches] = useState<CustomerMatch[]>([]);
-  const [nameMatches, setNameMatches] = useState<CustomerMatch[]>([]);
+  // بحث موحّد عن زبون مسجّل: يكتب الموظف اسماً أو رقماً في خانة واحدة.
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<CustomerMatch[]>([]);
+  const [searching, setSearching] = useState(false);
 
   // زبون بأكثر من قطعة: كل قطعة ببياناتها. تبدأ بقطعة واحدة، ويزيد الموظف العدد بزر.
   const [items, setItems] = useState<Item[]>([newItem()]);
@@ -220,37 +222,33 @@ export default function NewTicket() {
     return () => { active = false; };
   }, [branchId, staff]);
 
-  // بحث الزبون أثناء الكتابة، بمهلة قصيرة حتى لا نستدعي الخادم على كل حرف.
+  // الأرقام فقط ← بحث بالهاتف (محلياً وفي المخزون)؛ فيه حروف ← بحث بالاسم. بمهلة قصيرة أثناء الكتابة.
   useEffect(() => {
-    const digits = normalizeDigits(phone).replace(/\D/g, "");
-    if (digits.length < 3 || customerId) {
-      setMatches([]);
+    const q = query.trim();
+    const digits = normalizeDigits(q).replace(/\D/g, "");
+    const isNumber = q !== "" && /^[\d\s+\-٠-٩۰-۹]+$/.test(q);
+    if (customerId || (isNumber ? digits.length < 3 : q.length < 2)) {
+      setResults([]);
+      setSearching(false);
       return;
     }
+    setSearching(true);
+    let active = true;
     const timer = setTimeout(() => {
-      searchCustomers(digits).then(setMatches).catch(() => setMatches([]));
+      (isNumber ? searchCustomers(digits) : searchCustomersByName(q))
+        .then((r) => active && setResults(r))
+        .catch(() => active && setResults([]))
+        .finally(() => active && setSearching(false));
     }, 350);
-    return () => clearTimeout(timer);
-  }, [phone, customerId]);
-
-  // بحث بالاسم أثناء كتابته في حقل الاسم — نفس فكرة الهاتف، للزبون المسجّل.
-  useEffect(() => {
-    if (customerId || customerName.trim().length < 2) {
-      setNameMatches([]);
-      return;
-    }
-    const timer = setTimeout(() => {
-      searchCustomersByName(customerName).then(setNameMatches).catch(() => setNameMatches([]));
-    }, 350);
-    return () => clearTimeout(timer);
-  }, [customerName, customerId]);
+    return () => { active = false; clearTimeout(timer); };
+  }, [query, customerId]);
 
   function pickCustomer(m: CustomerMatch) {
     setCustomerId(m.id);
     setCustomerName(m.full_name);
     setPhone(m.phone);
-    setMatches([]);
-    setNameMatches([]);
+    setQuery("");
+    setResults([]);
   }
 
   async function uploadPhotos(ticketId: string, files: File[]) {
@@ -386,43 +384,70 @@ export default function NewTicket() {
         {/* ——— ١ الزبون ——— */}
         {step === 0 && (
           <div className="space-y-4">
+            {/* بحث عن زبون مسجّل — باسمه أو رقمه. من لم يُعثر عليه يُكتب جديداً في الحقلين تحت. */}
             <div>
-              <label className="label text-base" htmlFor="phone">رقم هاتف الزبون</label>
-              <input
-                id="phone"
-                type="text"
-                inputMode="tel"
-                dir="ltr"
-                autoFocus
-                className="field py-3.5 text-left text-lg"
-                placeholder="09xxxxxxxx"
-                value={phone}
-                onChange={(e) => {
-                  setPhone(e.target.value);
-                  if (customerId) setCustomerId("");
-                }}
-              />
-
-              {matches.length > 0 && !customerId && <CustomerSuggestions items={matches} onPick={pickCustomer} />}
-              {matches.length === 0 && !customerId && (
-                <p className="mt-1.5 text-xs text-slate-500">لو الزبون سبق أن جاء، سيظهر اسمه — اضغط عليه.</p>
+              <label className="label text-base" htmlFor="customer_search">ابحث عن زبون مسجّل</label>
+              <div className="relative">
+                <input
+                  id="customer_search"
+                  type="search"
+                  autoFocus
+                  enterKeyHint="search"
+                  className="field py-3.5 pr-10 text-lg"
+                  placeholder="الاسم أو رقم الهاتف"
+                  value={query}
+                  onChange={(e) => {
+                    setQuery(e.target.value);
+                    if (customerId) setCustomerId("");
+                  }}
+                />
+                <svg className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"
+                  width="18" height="18" viewBox="0 0 24 24" fill="none" strokeWidth={2}>
+                  <circle cx="11" cy="11" r="7" stroke="currentColor" />
+                  <path d="m20 20-3.2-3.2" stroke="currentColor" strokeLinecap="round" />
+                </svg>
+              </div>
+              {results.length > 0 && <CustomerSuggestions items={results} onPick={pickCustomer} />}
+              {results.length === 0 && !searching && !customerId && query.trim().length >= 2 && (
+                <p className="mt-1.5 text-xs text-slate-500">لا يوجد زبون بهذا — أضفه جديداً في الخانتين تحت.</p>
               )}
             </div>
 
-            <div>
-              <label className="label text-base" htmlFor="customer_name">اسم الزبون</label>
-              <input
-                id="customer_name"
-                className="field py-3.5 text-lg"
-                placeholder="الاسم كما يُنطق"
-                value={customerName}
-                onChange={(e) => {
-                  setCustomerName(e.target.value);
-                  if (customerId) setCustomerId("");
-                }}
-              />
-              {nameMatches.length > 0 && !customerId && <CustomerSuggestions items={nameMatches} onPick={pickCustomer} />}
-              {customerId && <p className="mt-1.5 text-xs font-medium text-brand-700">✓ زبون مسجّل</p>}
+            <div className="border-t border-slate-100 pt-4">
+              <p className="mb-3 text-sm font-semibold text-slate-600">
+                {customerId ? "✓ زبون مسجّل" : "بيانات الزبون"}
+              </p>
+              <div className="space-y-4">
+                <div>
+                  <label className="label text-base" htmlFor="phone">رقم هاتف الزبون</label>
+                  <input
+                    id="phone"
+                    type="text"
+                    inputMode="tel"
+                    dir="ltr"
+                    className="field py-3.5 text-left text-lg"
+                    placeholder="09xxxxxxxx"
+                    value={phone}
+                    onChange={(e) => {
+                      setPhone(e.target.value);
+                      if (customerId) setCustomerId("");
+                    }}
+                  />
+                </div>
+                <div>
+                  <label className="label text-base" htmlFor="customer_name">اسم الزبون</label>
+                  <input
+                    id="customer_name"
+                    className="field py-3.5 text-lg"
+                    placeholder="الاسم كما يُنطق"
+                    value={customerName}
+                    onChange={(e) => {
+                      setCustomerName(e.target.value);
+                      if (customerId) setCustomerId("");
+                    }}
+                  />
+                </div>
+              </div>
             </div>
           </div>
         )}
