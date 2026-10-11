@@ -199,8 +199,8 @@ export default function NewTicket() {
     })();
   }, [staff]);
 
-  // كل الموظفين الفعّالين — موظف الفرع المسؤول قد يغيب فيستلم زميل من فرع آخر، والحساب
-  // المفتوح في النظام يبقى كما هو. من سجّل الدخول في القائمة دائماً وهو الافتراضي.
+  // موظفو الفرع المختار فقط — المسؤول قد يغيب فيستلم زميل من الفرع نفسه، والحساب المفتوح
+  // في النظام يبقى كما هو. من سجّل الدخول في القائمة دائماً (المدير العام قد لا يتبع فرعاً).
   useEffect(() => {
     if (!branchId || !staff) return;
     let active = true;
@@ -208,6 +208,7 @@ export default function NewTicket() {
       .from("staff")
       .select("id, full_name, branch_id")
       .eq("is_active", true)
+      .eq("branch_id", branchId)
       .order("full_name")
       .then(({ data }) => {
         if (!active) return;
@@ -518,16 +519,9 @@ export default function NewTicket() {
             <div>
               <label className="label" htmlFor="received_by">المستلم</label>
               <select id="received_by" className="field" value={receivedBy} onChange={(e) => setReceivedBy(e.target.value)}>
-                <optgroup label="موظفو هذا الفرع">
-                  {branchStaff.filter((m) => m.branch_id === branchId || m.id === staff?.staff_id).map((m) => (
-                    <option key={m.id} value={m.id}>{m.full_name}{m.id === staff?.staff_id ? " (أنا)" : ""}</option>
-                  ))}
-                </optgroup>
-                <optgroup label="موظفون آخرون">
-                  {branchStaff.filter((m) => m.branch_id !== branchId && m.id !== staff?.staff_id).map((m) => (
-                    <option key={m.id} value={m.id}>{m.full_name}</option>
-                  ))}
-                </optgroup>
+                {branchStaff.map((m) => (
+                  <option key={m.id} value={m.id}>{m.full_name}{m.id === staff?.staff_id ? " (أنا)" : ""}</option>
+                ))}
               </select>
             </div>
 
