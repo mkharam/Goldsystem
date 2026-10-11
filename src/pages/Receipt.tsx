@@ -20,6 +20,8 @@ export default function Receipt() {
   const [params] = useSearchParams();
   const ids = id ? [id] : (params.get("ids") ?? "").split(",").filter(Boolean);
   const [settings, setSettings] = useState<Settings | null>(null);
+  // عدة قطع: أول صفحة ملخص الزيارة (للمحل والزبون)، وبعدها تذكرة مستقلة لكل قطعة.
+  const [perTicket, setPerTicket] = useState(true);
 
   useEffect(() => {
     getSettings().then(setSettings);
@@ -45,9 +47,25 @@ export default function Receipt() {
         <button type="button" onClick={print} className="btn-primary flex-1">طباعة</button>
       </div>
 
+      {ids.length > 1 && (
+        <label className="no-print mx-auto mb-4 flex max-w-[446px] items-center gap-2 px-4 text-sm text-slate-600">
+          <input type="checkbox" checked={perTicket} onChange={(e) => setPerTicket(e.target.checked)} />
+          اطبع تذكرة مستقلة لكل قطعة بعد صفحة الملخص
+        </label>
+      )}
+
       {ids.length === 1
         ? <ReceiptSheet id={ids[0]} settings={settings} />
-        : <CombinedSheet ids={ids} settings={settings} />}
+        : (
+          <>
+            <CombinedSheet ids={ids} settings={settings} />
+            {perTicket && ids.map((tid) => (
+              <div key={tid} className="receipt-page-break mt-6 print:mt-0">
+                <ReceiptSheet id={tid} settings={settings} />
+              </div>
+            ))}
+          </>
+        )}
     </div>
   );
 }

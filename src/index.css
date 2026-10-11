@@ -200,6 +200,12 @@
     min-height: 194mm;
   }
 
+  /* كل تذكرة مستقلة بعد صفحة الملخص تبدأ ورقة جديدة. */
+  .receipt-page-break {
+    break-before: page;
+    page-break-before: always;
+  }
+
   .a5-sheet {
     box-shadow: none !important;
     break-inside: avoid;
