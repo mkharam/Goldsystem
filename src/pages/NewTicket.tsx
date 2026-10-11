@@ -62,7 +62,7 @@ export default function NewTicket() {
   const [branchId, setBranchId] = useState("");
   // من استلم القطعة فعلاً: الافتراضي من سجّل الدخول، ويُغيَّر إن استلمها زميل في الفرع.
   const [receivedBy, setReceivedBy] = useState("");
-  const [branchStaff, setBranchStaff] = useState<{ id: string; full_name: string }[]>([]);
+  const [branchStaff, setBranchStaff] = useState<{ id: string; full_name: string; branch_id: string | null }[]>([]);
   const [inventoryDown, setInventoryDown] = useState(false);
   const [promisedAt, setPromisedAt] = useState("");
   // مدة الإنجاز المعتادة من الإعدادات — تُعرض كاختيار سريع فقط، لا تُملأ تلقائياً.
@@ -199,21 +199,20 @@ export default function NewTicket() {
     })();
   }, [staff]);
 
-  // موظفو الفرع المختار — يختار منهم المستلم الفعلي. من سجّل الدخول يبقى في القائمة دائماً
-  // (المدير العام قد لا يتبع فرعاً) وهو الافتراضي.
+  // كل الموظفين الفعّالين — موظف الفرع المسؤول قد يغيب فيستلم زميل من فرع آخر، والحساب
+  // المفتوح في النظام يبقى كما هو. من سجّل الدخول في القائمة دائماً وهو الافتراضي.
   useEffect(() => {
     if (!branchId || !staff) return;
     let active = true;
     supabase
       .from("staff")
-      .select("id, full_name")
+      .select("id, full_name, branch_id")
       .eq("is_active", true)
-      .eq("branch_id", branchId)
       .order("full_name")
       .then(({ data }) => {
         if (!active) return;
         const list = data ?? [];
-        if (!list.some((m) => m.id === staff.staff_id)) list.unshift({ id: staff.staff_id, full_name: staff.full_name });
+        if (!list.some((m) => m.id === staff.staff_id)) list.unshift({ id: staff.staff_id, full_name: staff.full_name, branch_id: staff.branch_id });
         setBranchStaff(list);
         setReceivedBy((current) => (current && list.some((m) => m.id === current) ? current : staff.staff_id));
       });
@@ -516,16 +515,21 @@ export default function NewTicket() {
             </div>
 
             {/* من استلم القطعة: الافتراضي أنت، وغيّره لو استلمها زميل في الفرع. */}
-            {branchStaff.length > 1 && (
-              <div>
-                <label className="label" htmlFor="received_by">المستلم</label>
-                <select id="received_by" className="field" value={receivedBy} onChange={(e) => setReceivedBy(e.target.value)}>
-                  {branchStaff.map((m) => (
+            <div>
+              <label className="label" htmlFor="received_by">المستلم</label>
+              <select id="received_by" className="field" value={receivedBy} onChange={(e) => setReceivedBy(e.target.value)}>
+                <optgroup label="موظفو هذا الفرع">
+                  {branchStaff.filter((m) => m.branch_id === branchId || m.id === staff?.staff_id).map((m) => (
                     <option key={m.id} value={m.id}>{m.full_name}{m.id === staff?.staff_id ? " (أنا)" : ""}</option>
                   ))}
-                </select>
-              </div>
-            )}
+                </optgroup>
+                <optgroup label="موظفون آخرون">
+                  {branchStaff.filter((m) => m.branch_id !== branchId && m.id !== staff?.staff_id).map((m) => (
+                    <option key={m.id} value={m.id}>{m.full_name}</option>
+                  ))}
+                </optgroup>
+              </select>
+            </div>
 
             {/* مراجعة سريعة قبل الحفظ: يرى ما سيُطبع على الإيصالات. */}
             <div className="rounded-xl bg-slate-50 p-3 text-sm">
