@@ -60,6 +60,9 @@ export default function NewTicket() {
   const [step, setStep] = useState(0);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [branchId, setBranchId] = useState("");
+  // من استلم القطعة فعلاً: الافتراضي من سجّل الدخول، ويُغيَّر إن استلمها زميل في الفرع.
+  const [receivedBy, setReceivedBy] = useState("");
+  const [branchStaff, setBranchStaff] = useState<{ id: string; full_name: string }[]>([]);
   const [inventoryDown, setInventoryDown] = useState(false);
   const [promisedAt, setPromisedAt] = useState("");
   // مدة الإنجاز المعتادة من الإعدادات — تُعرض كاختيار سريع فقط، لا تُملأ تلقائياً.
@@ -196,6 +199,27 @@ export default function NewTicket() {
     })();
   }, [staff]);
 
+  // موظفو الفرع المختار — يختار منهم المستلم الفعلي. من سجّل الدخول يبقى في القائمة دائماً
+  // (المدير العام قد لا يتبع فرعاً) وهو الافتراضي.
+  useEffect(() => {
+    if (!branchId || !staff) return;
+    let active = true;
+    supabase
+      .from("staff")
+      .select("id, full_name")
+      .eq("is_active", true)
+      .eq("branch_id", branchId)
+      .order("full_name")
+      .then(({ data }) => {
+        if (!active) return;
+        const list = data ?? [];
+        if (!list.some((m) => m.id === staff.staff_id)) list.unshift({ id: staff.staff_id, full_name: staff.full_name });
+        setBranchStaff(list);
+        setReceivedBy((current) => (current && list.some((m) => m.id === current) ? current : staff.staff_id));
+      });
+    return () => { active = false; };
+  }, [branchId, staff]);
+
   // بحث الزبون أثناء الكتابة، بمهلة قصيرة حتى لا نستدعي الخادم على كل حرف.
   useEffect(() => {
     const digits = normalizeDigits(phone).replace(/\D/g, "");
@@ -285,7 +309,7 @@ export default function NewTicket() {
         const ticket = await createTicket({
           customer_id: resolvedCustomerId,
           branch_id: branchId,
-          received_by: staff!.staff_id,
+          received_by: receivedBy || staff!.staff_id,
           item_source: "manual",
           inventory_product_id: null,
           item_code: null,
@@ -491,6 +515,18 @@ export default function NewTicket() {
               )}
             </div>
 
+            {/* من استلم القطعة: الافتراضي أنت، وغيّره لو استلمها زميل في الفرع. */}
+            {branchStaff.length > 1 && (
+              <div>
+                <label className="label" htmlFor="received_by">المستلم</label>
+                <select id="received_by" className="field" value={receivedBy} onChange={(e) => setReceivedBy(e.target.value)}>
+                  {branchStaff.map((m) => (
+                    <option key={m.id} value={m.id}>{m.full_name}{m.id === staff?.staff_id ? " (أنا)" : ""}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             {/* مراجعة سريعة قبل الحفظ: يرى ما سيُطبع على الإيصالات. */}
             <div className="rounded-xl bg-slate-50 p-3 text-sm">
               <p className="mb-2 font-semibold text-slate-700">
@@ -500,6 +536,7 @@ export default function NewTicket() {
                 <Line label="الزبون" value={`${customerName || "—"} · ${phone || "—"}`} />
                 <Line label="التسليم" value={promisedLabel} />
                 <Line label="الفرع" value={branchName ?? "—"} />
+                <Line label="المستلم" value={branchStaff.find((m) => m.id === receivedBy)?.full_name ?? staff?.full_name ?? "—"} />
               </dl>
               <ol className="mt-2 space-y-1.5 border-t border-slate-200 pt-2">
                 {items.map((it, i) => (
