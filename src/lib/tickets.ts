@@ -169,6 +169,20 @@ export async function searchCustomers(phone: string): Promise<CustomerMatch[]> {
   return matches;
 }
 
+/** بحث الزبون بالاسم (محلياً): مطابقة مطبّعة وبأي ترتيب للكلمات، عبر نفس دالة بحث التذاكر. */
+export async function searchCustomersByName(name: string): Promise<CustomerMatch[]> {
+  const q = name.trim();
+  if (q.length < 2) return [];
+  const { data: ids } = await supabase.rpc("search_customer_ids", { q });
+  const list = ((ids as string[] | null) ?? []).slice(0, 8);
+  if (list.length === 0) return [];
+  const { data } = await supabase
+    .from("customers")
+    .select("id, inventory_customer_id, full_name, phone, notes")
+    .in("id", list);
+  return (data ?? []).map((c) => ({ ...c, origin: "local" as const }));
+}
+
 /** يُرجع معرّف زبون محلي جاهز للربط، منشئاً إياه عند الحاجة. */
 export async function resolveCustomer(input: {
   customerId?: string | null;

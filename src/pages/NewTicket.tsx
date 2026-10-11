@@ -7,7 +7,7 @@ import { buzz } from "@/lib/haptics";
 import { supabase, PHOTO_BUCKET } from "@/lib/supabase";
 import { inventoryHealth } from "@/lib/inventory";
 import {
-  searchCustomers, resolveCustomer, createTicket, getSettings,
+  searchCustomers, searchCustomersByName, resolveCustomer, createTicket, getSettings,
   type CustomerMatch,
 } from "@/lib/tickets";
 import { KARAT_OPTIONS, ITEM_TYPE_OPTIONS, normalizeDigits } from "@/lib/constants";
@@ -72,6 +72,7 @@ export default function NewTicket() {
   const [customerName, setCustomerName] = useState("");
   const [customerId, setCustomerId] = useState("");
   const [matches, setMatches] = useState<CustomerMatch[]>([]);
+  const [nameMatches, setNameMatches] = useState<CustomerMatch[]>([]);
 
   // زبون بأكثر من قطعة: كل قطعة ببياناتها. تبدأ بقطعة واحدة، ويزيد الموظف العدد بزر.
   const [items, setItems] = useState<Item[]>([newItem()]);
@@ -232,6 +233,26 @@ export default function NewTicket() {
     return () => clearTimeout(timer);
   }, [phone, customerId]);
 
+  // بحث بالاسم أثناء كتابته في حقل الاسم — نفس فكرة الهاتف، للزبون المسجّل.
+  useEffect(() => {
+    if (customerId || customerName.trim().length < 2) {
+      setNameMatches([]);
+      return;
+    }
+    const timer = setTimeout(() => {
+      searchCustomersByName(customerName).then(setNameMatches).catch(() => setNameMatches([]));
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [customerName, customerId]);
+
+  function pickCustomer(m: CustomerMatch) {
+    setCustomerId(m.id);
+    setCustomerName(m.full_name);
+    setPhone(m.phone);
+    setMatches([]);
+    setNameMatches([]);
+  }
+
   async function uploadPhotos(ticketId: string, files: File[]) {
     for (const file of files) {
       const ext = file.name.split(".").pop()?.toLowerCase() ?? "jpg";
@@ -365,7 +386,7 @@ export default function NewTicket() {
         {/* ——— ١ الزبون ——— */}
         {step === 0 && (
           <div className="space-y-4">
-            <div className="relative">
+            <div>
               <label className="label text-base" htmlFor="phone">رقم هاتف الزبون</label>
               <input
                 id="phone"
@@ -382,31 +403,10 @@ export default function NewTicket() {
                 }}
               />
 
-              {matches.length > 0 && !customerId && (
-                <ul className="absolute z-10 mt-1 w-full overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
-                  {matches.map((m) => (
-                    <li key={m.id}>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setCustomerId(m.id);
-                          setCustomerName(m.full_name);
-                          setPhone(m.phone);
-                          setMatches([]);
-                        }}
-                        className="flex w-full items-center justify-between px-3 py-3 text-right hover:bg-brand-50"
-                      >
-                        <span>
-                          <span className="block font-medium text-slate-900">{m.full_name}</span>
-                          <span className="block text-xs text-slate-500" dir="ltr">{m.phone}</span>
-                        </span>
-                        <span className="badge border-brand-200 bg-brand-50 text-brand-700">زبون سابق</span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
+              {matches.length > 0 && !customerId && <CustomerSuggestions items={matches} onPick={pickCustomer} />}
+              {matches.length === 0 && !customerId && (
+                <p className="mt-1.5 text-xs text-slate-500">لو الزبون سبق أن جاء، سيظهر اسمه — اضغط عليه.</p>
               )}
-              <p className="mt-1.5 text-xs text-slate-500">لو الزبون سبق أن جاء، سيظهر اسمه — اضغط عليه.</p>
             </div>
 
             <div>
@@ -416,8 +416,13 @@ export default function NewTicket() {
                 className="field py-3.5 text-lg"
                 placeholder="الاسم كما يُنطق"
                 value={customerName}
-                onChange={(e) => setCustomerName(e.target.value)}
+                onChange={(e) => {
+                  setCustomerName(e.target.value);
+                  if (customerId) setCustomerId("");
+                }}
               />
+              {nameMatches.length > 0 && !customerId && <CustomerSuggestions items={nameMatches} onPick={pickCustomer} />}
+              {customerId && <p className="mt-1.5 text-xs font-medium text-brand-700">✓ زبون مسجّل</p>}
             </div>
           </div>
         )}
@@ -598,6 +603,31 @@ export default function NewTicket() {
         )}
       </div>
     </AppShell>
+  );
+}
+
+/** اقتراحات الزبون المسجّل: قائمة داخل مسار الصفحة (لا تطفو فوق الحقول) تدفع ما تحتها للأسفل. */
+function CustomerSuggestions({ items, onPick }: { items: CustomerMatch[]; onPick: (m: CustomerMatch) => void }) {
+  return (
+    <div className="mt-2 space-y-2" role="listbox">
+      {items.map((m) => (
+        <button
+          key={m.id}
+          type="button"
+          role="option"
+          onClick={() => onPick(m)}
+          className="flex w-full items-center justify-between gap-3 rounded-xl border border-brand-200 bg-brand-50/60 px-3 py-3 text-right transition active:scale-[0.98]"
+        >
+          <span className="min-w-0">
+            <span className="block truncate font-semibold text-slate-900">{m.full_name}</span>
+            <span className="block text-sm text-slate-500" dir="ltr" style={{ textAlign: "right" }}>{m.phone}</span>
+          </span>
+          <span className="badge shrink-0 border-brand-200 bg-white text-brand-700">
+            {m.origin === "inventory" ? "من المخزون" : "زبون سابق"}
+          </span>
+        </button>
+      ))}
+    </div>
   );
 }
 
