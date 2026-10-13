@@ -22,6 +22,8 @@ export type DraftItem = {
 export type IntakeDraft = {
   at: number;
   step: number;
+  kind?: "shop" | "client" | "";
+  receivedBy?: string;
   phone: string;
   customerName: string;
   customerId: string;

@@ -7,7 +7,7 @@ import { buzz } from "@/lib/haptics";
 import { supabase, PHOTO_BUCKET } from "@/lib/supabase";
 import { inventoryHealth } from "@/lib/inventory";
 import {
-  searchCustomers, searchCustomersByName, resolveCustomer, createTicket, getSettings,
+  searchCustomers, searchCustomersByName, resolveCustomer, getShopCustomerId, createTicket, getSettings,
   type CustomerMatch,
 } from "@/lib/tickets";
 import { KARAT_OPTIONS, ITEM_TYPE_OPTIONS, normalizeDigits } from "@/lib/constants";
@@ -16,7 +16,17 @@ import { compressImages, makeThumbnail } from "@/lib/image";
 
 type Branch = { id: string; name: string; code: string | null };
 
-const STEP_LABELS = ["الزبون", "القطع", "التسليم"];
+type Kind = "shop" | "client";
+type Phase = "kind" | "receiver" | "customer" | "items" | "delivery";
+
+// الخطوات تتبع نوع الصيانة: صيانة للمحل نفسه لا زبون فيها فتُحذف خطوة الزبون.
+const PHASE_LABELS: Record<Phase, string> = {
+  kind: "النوع", receiver: "المستلم", customer: "الزبون", items: "القطع", delivery: "التسليم",
+};
+const phasesFor = (kind: Kind | ""): Phase[] =>
+  kind === "shop"
+    ? ["kind", "receiver", "items", "delivery"]
+    : ["kind", "receiver", "customer", "items", "delivery"];
 
 /** قطعة واحدة من قطع الزبون — كل قطعة تصبح تذكرة مستقلة بحالتها وإيصالها ورمز متابعتها. */
 type Item = {
@@ -58,6 +68,10 @@ export default function NewTicket() {
   const [searchParams] = useSearchParams();
 
   const [step, setStep] = useState(0);
+  const [kind, setKind] = useState<Kind | "">("");
+  const phases = phasesFor(kind);
+  const phase = phases[Math.min(step, phases.length - 1)];
+  const lastStep = phases.length - 1;
   const [branches, setBranches] = useState<Branch[]>([]);
   const [branchId, setBranchId] = useState("");
   // من استلم القطعة فعلاً: الافتراضي من سجّل الدخول، ويُغيَّر إن استلمها زميل في الفرع.
@@ -71,9 +85,6 @@ export default function NewTicket() {
   const [phone, setPhone] = useState("");
   const [customerName, setCustomerName] = useState("");
   const [customerId, setCustomerId] = useState("");
-  // بحث موحّد عن زبون مسجّل: يكتب الموظف اسماً أو رقماً في خانة واحدة.
-  const [query, setQuery] = useState("");
-
 
   // زبون بأكثر من قطعة: كل قطعة ببياناتها. تبدأ بقطعة واحدة، ويزيد الموظف العدد بزر.
   const [items, setItems] = useState<Item[]>([newItem()]);
@@ -123,6 +134,8 @@ export default function NewTicket() {
       return;
     }
     setStep(d.step);
+    if (d.kind) setKind(d.kind);
+    if (d.receivedBy) setReceivedBy(d.receivedBy);
     setPhone(d.phone);
     setCustomerName(d.customerName);
     setCustomerId(d.customerId);
@@ -150,27 +163,31 @@ export default function NewTicket() {
     setPhone(searchParams.get("phone") ?? "");
     const bid = searchParams.get("branchId");
     if (bid) setBranchId(bid);
+    // الزبون معروف فنتخطى النوع (لزبون) ونبدأ من المستلم.
+    setKind("client");
     setStep(1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draftReady, restored]);
 
   useEffect(() => {
     if (!draftReady) return;
-    const empty = !phone.trim() && !customerName.trim() && savedIds.length === 0 &&
+    const empty = !kind && !phone.trim() && !customerName.trim() && savedIds.length === 0 &&
       items.every((it) => !it.name.trim() && !it.problem.trim() && !it.weight.trim() && it.files.length === 0);
     const t = setTimeout(() => {
       if (empty) return void clearDraft();
       saveDraft({
-        step, phone, customerName, customerId, branchId, promisedAt, savedIds,
+        step, kind, receivedBy, phone, customerName, customerId, branchId, promisedAt, savedIds,
         items: items.map(({ files: _f, ...rest }) => rest),
       });
     }, 300);
     return () => clearTimeout(t);
-  }, [draftReady, step, phone, customerName, customerId, branchId, promisedAt, items, savedIds]);
+  }, [draftReady, step, kind, receivedBy, phone, customerName, customerId, branchId, promisedAt, items, savedIds]);
 
   async function startOver() {
     await clearDraft();
     setStep(0);
+    setKind("");
+    setReceivedBy("");
     setPhone("");
     setCustomerName("");
     setCustomerId("");
@@ -225,10 +242,8 @@ export default function NewTicket() {
     setCustomerId(m.id);
     setCustomerName(m.full_name);
     setPhone(m.phone);
-    setQuery("");
   }
-  // الاقتراحات تظهر من أي حقل يكتب فيه الموظف: خانة البحث أو الهاتف أو الاسم.
-  const searchBox = useCustomerMatches(query, !!customerId);
+  // الاقتراحات تظهر من حقلَي الهاتف والاسم.
   const phoneBox = useCustomerMatches(phone, !!customerId);
   const nameBox = useCustomerMatches(customerName, !!customerId);
 
@@ -268,11 +283,15 @@ export default function NewTicket() {
   /** لا ينتقل لخطوة تالية قبل اكتمال الحالية — الخطأ يظهر مكانه لا بعد الحفظ. */
   function goNext() {
     setError(null);
-    if (step === 0) {
+    if (phase === "kind" && !kind) return setError("اختر: صيانة للمحل أم لزبون");
+    if (phase === "receiver" && branchStaff.length > 0 && !receivedBy) {
+      return setError("اختر الموظف الذي استلم القطعة");
+    }
+    if (phase === "customer") {
       if (!normalizeDigits(phone).trim()) return setError("اكتب رقم هاتف الزبون");
       if (!customerName.trim()) return setError("اكتب اسم الزبون");
     }
-    if (step === 1) {
+    if (phase === "items") {
       // الخطأ يشير للقطعة بالرقم — مع عدة قطع يجب أن يعرف الموظف أيّها ناقصة.
       const label = (i: number) => (items.length > 1 ? ` (القطعة ${i + 1})` : "");
       for (let i = 0; i < items.length; i++) {
@@ -295,11 +314,13 @@ export default function NewTicket() {
 
     setBusy(true);
     try {
-      const resolvedCustomerId = await resolveCustomer({
-        customerId: customerId || null,
-        fullName: customerName.trim(),
-        phone: normalizeDigits(phone).trim(),
-      });
+      const resolvedCustomerId = kind === "shop"
+        ? await getShopCustomerId()
+        : await resolveCustomer({
+            customerId: customerId || null,
+            fullName: customerName.trim(),
+            phone: normalizeDigits(phone).trim(),
+          });
 
       // تذكرة لكل قطعة، بالتتابع حتى تأخذ أرقاماً متتالية. ما حُفظ يبقى محفوظاً إن فشلت
       // قطعة لاحقة — لا نعيد إنشاءه عند إعادة المحاولة.
@@ -360,85 +381,98 @@ export default function NewTicket() {
         </div>
       )}
 
-      <Steps labels={STEP_LABELS} current={step} />
+      <Steps labels={phases.map((p) => PHASE_LABELS[p])} current={step} />
 
       <div className="card p-4">
-        {/* ——— ١ الزبون ——— */}
-        {step === 0 && (
-          <div className="space-y-4">
-            {/* بحث عن زبون مسجّل — باسمه أو رقمه. من لم يُعثر عليه يُكتب جديداً في الحقلين تحت. */}
-            <div>
-              <label className="label text-base" htmlFor="customer_search">ابحث عن زبون مسجّل</label>
-              <div className="relative">
-                <input
-                  id="customer_search"
-                  type="search"
-                  autoFocus
-                  enterKeyHint="search"
-                  className="field py-3.5 pr-10 text-lg"
-                  placeholder="الاسم أو رقم الهاتف"
-                  value={query}
-                  onChange={(e) => {
-                    setQuery(e.target.value);
-                    if (customerId) setCustomerId("");
-                  }}
-                />
-                <svg className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"
-                  width="18" height="18" viewBox="0 0 24 24" fill="none" strokeWidth={2}>
-                  <circle cx="11" cy="11" r="7" stroke="currentColor" />
-                  <path d="m20 20-3.2-3.2" stroke="currentColor" strokeLinecap="round" />
-                </svg>
-              </div>
-              {searchBox.results.length > 0 && <CustomerSuggestions items={searchBox.results} onPick={pickCustomer} />}
-              {searchBox.results.length === 0 && !searchBox.searching && !customerId && query.trim().length >= 2 && (
-                <p className="mt-1.5 text-xs text-slate-500">لا يوجد زبون بهذا — أضفه جديداً في الخانتين تحت.</p>
-              )}
-            </div>
+        {/* ——— ١ النوع: للمحل أم لزبون ——— */}
+        {phase === "kind" && (
+          <div className="space-y-3">
+            <p className="text-base font-bold text-brand-800">هذه الصيانة لمن؟</p>
+            {([
+              { value: "client", title: "لزبون", hint: "قطعة أحضرها زبون للإصلاح" },
+              { value: "shop", title: "للمحل", hint: "قطعة من المحل تحتاج إصلاحاً" },
+            ] as const).map((o) => (
+              <button
+                key={o.value}
+                type="button"
+                onClick={() => setKind(o.value)}
+                className={`w-full rounded-xl border-2 px-4 py-4 text-right transition ${
+                  kind === o.value ? "border-brand-700 bg-brand-50" : "border-slate-300 bg-white"
+                }`}
+              >
+                <span className="block text-lg font-bold text-slate-900">{o.title}</span>
+                <span className="block text-sm text-slate-500">{o.hint}</span>
+              </button>
+            ))}
+          </div>
+        )}
 
-            <div className="border-t border-slate-100 pt-4">
-              <p className="mb-3 text-sm font-semibold text-slate-600">
-                {customerId ? "✓ زبون مسجّل" : "بيانات الزبون"}
-              </p>
-              <div className="space-y-4">
-                <div>
-                  <label className="label text-base" htmlFor="phone">رقم هاتف الزبون</label>
-                  <input
-                    id="phone"
-                    type="text"
-                    inputMode="tel"
-                    dir="ltr"
-                    className="field py-3.5 text-left text-lg"
-                    placeholder="09xxxxxxxx"
-                    value={phone}
-                    onChange={(e) => {
-                      setPhone(e.target.value);
-                      if (customerId) setCustomerId("");
-                    }}
-                  />
-                  {phoneBox.results.length > 0 && <CustomerSuggestions items={phoneBox.results} onPick={pickCustomer} />}
-                </div>
-                <div>
-                  <label className="label text-base" htmlFor="customer_name">اسم الزبون</label>
-                  <input
-                    id="customer_name"
-                    className="field py-3.5 text-lg"
-                    placeholder="الاسم كما يُنطق"
-                    value={customerName}
-                    onChange={(e) => {
-                      setCustomerName(e.target.value);
-                      if (customerId) setCustomerId("");
-                    }}
-                  />
-                  {nameBox.results.length > 0 && <CustomerSuggestions items={nameBox.results} onPick={pickCustomer} />}
-                </div>
+        {/* ——— ٢ المستلم: من استلم القطعة فعلاً ——— */}
+        {phase === "receiver" && (
+          <div className="space-y-3">
+            <p className="text-base font-bold text-brand-800">من استلم القطعة؟</p>
+            {branchStaff.length === 0 ? (
+              <p className="text-sm text-slate-500">لا موظفون مسجّلون في هذا الفرع — سيُسجَّل المستلم باسمك.</p>
+            ) : (
+              <div className="grid grid-cols-2 gap-2">
+                {branchStaff.map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => setReceivedBy(m.id)}
+                    className={`rounded-xl border-2 px-3 py-3.5 text-base font-semibold transition ${
+                      receivedBy === m.id ? "border-brand-700 bg-brand-700 text-white" : "border-slate-300 bg-white text-slate-700"
+                    }`}
+                  >
+                    {m.full_name}
+                  </button>
+                ))}
               </div>
+            )}
+          </div>
+        )}
+
+        {/* ——— الزبون: حقلان فقط، الهاتف والاسم ——— */}
+        {phase === "customer" && (
+          <div className="space-y-4">
+            <div>
+              <label className="label text-base" htmlFor="phone">رقم هاتف الزبون</label>
+              <input
+                id="phone"
+                type="text"
+                inputMode="tel"
+                dir="ltr"
+                autoFocus
+                className="field py-3.5 text-left text-lg"
+                placeholder="09xxxxxxxx"
+                value={phone}
+                onChange={(e) => {
+                  setPhone(e.target.value);
+                  if (customerId) setCustomerId("");
+                }}
+              />
+              {phoneBox.results.length > 0 && <CustomerSuggestions items={phoneBox.results} onPick={pickCustomer} />}
+            </div>
+            <div>
+              <label className="label text-base" htmlFor="customer_name">اسم الزبون</label>
+              <input
+                id="customer_name"
+                className="field py-3.5 text-lg"
+                placeholder="الاسم كما يُنطق"
+                value={customerName}
+                onChange={(e) => {
+                  setCustomerName(e.target.value);
+                  if (customerId) setCustomerId("");
+                }}
+              />
+              {nameBox.results.length > 0 && <CustomerSuggestions items={nameBox.results} onPick={pickCustomer} />}
             </div>
           </div>
         )}
 
         {/* ——— ٢ القطع ——— */}
         {/* كم قطعة؟ ثم بطاقة لكل قطعة: اسمها، عيارها، وزنها، المطلوب، سعرها، وصورتها. */}
-        {step === 1 && (
+        {phase === "items" && (
           <div className="space-y-4">
             <div className="flex items-center justify-between gap-3 rounded-xl bg-brand-50 px-3 py-2.5">
               <span className="text-base font-bold text-brand-800">كم قطعة؟</span>
@@ -479,7 +513,7 @@ export default function NewTicket() {
 
         {/* ——— ٣ التسليم ——— */}
         {/* الموعد خيار خفيف بضغطة، ثم مراجعة كل القطع قبل الحفظ. الفرع — نادراً ما يتغيّر — في "المزيد". */}
-        {step === 2 && (
+        {phase === "delivery" && (
           <div className="space-y-5">
             {/* موعد التسليم — اختياري وخفيف */}
             <div>
@@ -529,24 +563,14 @@ export default function NewTicket() {
               )}
             </div>
 
-            {/* من استلم القطعة: الافتراضي أنت، وغيّره لو استلمها زميل في الفرع. */}
-            <div>
-              <label className="label" htmlFor="received_by">المستلم</label>
-              <select id="received_by" className="field" value={receivedBy} onChange={(e) => setReceivedBy(e.target.value)}>
-                <option value="">اختر المستلم…</option>
-                {branchStaff.map((m) => (
-                  <option key={m.id} value={m.id}>{m.full_name}</option>
-                ))}
-              </select>
-            </div>
-
             {/* مراجعة سريعة قبل الحفظ: يرى ما سيُطبع على الإيصالات. */}
             <div className="rounded-xl bg-slate-50 p-3 text-sm">
               <p className="mb-2 font-semibold text-slate-700">
                 مراجعة{items.length > 1 && <span className="font-normal text-slate-500"> — {items.length} قطع في إيصال واحد</span>}
               </p>
               <dl className="space-y-1 text-slate-600">
-                <Line label="الزبون" value={`${customerName || "—"} · ${phone || "—"}`} />
+                <Line label="النوع" value={kind === "shop" ? "صيانة للمحل" : "صيانة لزبون"} />
+                {kind !== "shop" && <Line label="الزبون" value={`${customerName || "—"} · ${phone || "—"}`} />}
                 <Line label="التسليم" value={promisedLabel} />
                 <Line label="الفرع" value={branchName ?? "—"} />
                 <Line label="المستلم" value={branchStaff.find((m) => m.id === receivedBy)?.full_name ?? "—"} />
@@ -600,7 +624,7 @@ export default function NewTicket() {
             رجوع
           </button>
         )}
-        {step < 2 ? (
+        {step < lastStep ? (
           <button type="button" onClick={goNext} className="btn-primary flex-1 py-4 text-base">
             التالي
           </button>
