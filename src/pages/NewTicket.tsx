@@ -7,7 +7,7 @@ import { buzz } from "@/lib/haptics";
 import { supabase, PHOTO_BUCKET } from "@/lib/supabase";
 import { inventoryHealth } from "@/lib/inventory";
 import {
-  searchCustomers, resolveCustomer, createTicket, getSettings,
+  searchCustomers, resolveCustomer, getShopCustomerId, createTicket, getSettings,
   type CustomerMatch,
 } from "@/lib/tickets";
 import { KARAT_OPTIONS, ITEM_TYPE_OPTIONS, normalizeDigits } from "@/lib/constants";
@@ -15,7 +15,18 @@ import { loadDraft, saveDraft, clearDraft, saveItemFiles, loadItemFiles } from "
 
 type Branch = { id: string; name: string; code: string | null };
 
-const STEP_LABELS = ["الزبون", "القطع", "التسليم"];
+type Kind = "shop" | "client";
+type Phase = "kind" | "receiver" | "customer" | "items" | "delivery";
+type Receiver = { id: string; full_name: string };
+
+// الخطوات تتبع نوع الصيانة: صيانة للمحل نفسه لا زبون فيها فتُحذف خطوة الزبون.
+const PHASE_LABELS: Record<Phase, string> = {
+  kind: "النوع", receiver: "المستلم", customer: "الزبون", items: "القطع", delivery: "التسليم",
+};
+const phasesFor = (kind: Kind | ""): Phase[] =>
+  kind === "shop"
+    ? ["kind", "receiver", "items", "delivery"]
+    : ["kind", "receiver", "customer", "items", "delivery"];
 
 /** قطعة واحدة من قطع الزبون — كل قطعة تصبح تذكرة مستقلة بحالتها وإيصالها ورمز متابعتها. */
 type Item = {
@@ -56,6 +67,12 @@ export default function NewTicket() {
   const navigate = useNavigate();
 
   const [step, setStep] = useState(0);
+  const [kind, setKind] = useState<Kind | "">("");
+  const [receivers, setReceivers] = useState<Receiver[]>([]);
+  const [receiverId, setReceiverId] = useState("");
+  const phases = phasesFor(kind);
+  const phase = phases[Math.min(step, phases.length - 1)];
+  const lastStep = phases.length - 1;
   const [branches, setBranches] = useState<Branch[]>([]);
   const [branchId, setBranchId] = useState("");
   const [inventoryDown, setInventoryDown] = useState(false);
@@ -105,6 +122,8 @@ export default function NewTicket() {
       return;
     }
     setStep(d.step);
+    if (d.kind) setKind(d.kind);
+    if (d.receiverId) setReceiverId(d.receiverId);
     setPhone(d.phone);
     setCustomerName(d.customerName);
     setCustomerId(d.customerId);
@@ -123,21 +142,23 @@ export default function NewTicket() {
 
   useEffect(() => {
     if (!draftReady) return;
-    const empty = !phone.trim() && !customerName.trim() && savedIds.length === 0 &&
+    const empty = !kind && !phone.trim() && !customerName.trim() && savedIds.length === 0 &&
       items.every((it) => !it.name.trim() && !it.problem.trim() && !it.weight.trim() && it.files.length === 0);
     const t = setTimeout(() => {
       if (empty) return void clearDraft();
       saveDraft({
-        step, phone, customerName, customerId, branchId, promisedAt, savedIds,
+        step, kind, receiverId, phone, customerName, customerId, branchId, promisedAt, savedIds,
         items: items.map(({ files: _f, ...rest }) => rest),
       });
     }, 300);
     return () => clearTimeout(t);
-  }, [draftReady, step, phone, customerName, customerId, branchId, promisedAt, items, savedIds]);
+  }, [draftReady, step, kind, receiverId, phone, customerName, customerId, branchId, promisedAt, items, savedIds]);
 
   async function startOver() {
     await clearDraft();
     setStep(0);
+    setKind("");
+    setReceiverId(staff?.staff_id ?? "");
     setPhone("");
     setCustomerName("");
     setCustomerId("");
@@ -150,14 +171,18 @@ export default function NewTicket() {
 
   useEffect(() => {
     (async () => {
-      const [{ data: rows }, settings, health] = await Promise.all([
+      const [{ data: rows }, { data: staffRows }, settings, health] = await Promise.all([
         supabase.from("branches").select("id, name, code").eq("is_active", true).order("code"),
+        supabase.from("staff").select("id, full_name").eq("is_active", true).order("full_name"),
         getSettings(),
         inventoryHealth(),
       ]);
       // غير المدير العام لا يفتح تذكرة إلا في فرعه (وRLS ترفض غير ذلك).
       const allowed = staff?.role === "admin" ? (rows ?? []) : (rows ?? []).filter((b) => b.id === staff?.branch_id);
       setBranches(allowed);
+      setReceivers((staffRows ?? []) as Receiver[]);
+      // المستلم الافتراضي هو الموظف الحالي — لا يُكتب فوق ما استُعيد من المسودّة.
+      setReceiverId((current) => current || staff?.staff_id || "");
       // لا نكتب فوق فرع استُعيد من المسودّة.
       setBranchId((current) => current || staff?.branch_id || allowed[0]?.id || "");
       // موعد التسليم لا يُملأ تلقائياً: كان يُكتب "بعد 3 أيام" في كل إيصال حتى حين لم يتفق
@@ -205,11 +230,17 @@ export default function NewTicket() {
   /** لا ينتقل لخطوة تالية قبل اكتمال الحالية — الخطأ يظهر مكانه لا بعد الحفظ. */
   function goNext() {
     setError(null);
-    if (step === 0) {
+    if (phase === "kind") {
+      if (!kind) return setError("اختر: صيانة للمحل أم لزبون");
+    }
+    if (phase === "receiver") {
+      if (!receiverId) return setError("اختر من استلم القطعة");
+    }
+    if (phase === "customer") {
       if (!normalizeDigits(phone).trim()) return setError("اكتب رقم هاتف الزبون");
       if (!customerName.trim()) return setError("اكتب اسم الزبون");
     }
-    if (step === 1) {
+    if (phase === "items") {
       // الخطأ يشير للقطعة بالرقم — مع عدة قطع يجب أن يعرف الموظف أيّها ناقصة.
       const label = (i: number) => (items.length > 1 ? ` (القطعة ${i + 1})` : "");
       for (let i = 0; i < items.length; i++) {
@@ -231,11 +262,13 @@ export default function NewTicket() {
 
     setBusy(true);
     try {
-      const resolvedCustomerId = await resolveCustomer({
-        customerId: customerId || null,
-        fullName: customerName.trim(),
-        phone: normalizeDigits(phone).trim(),
-      });
+      const resolvedCustomerId = kind === "shop"
+        ? await getShopCustomerId()
+        : await resolveCustomer({
+            customerId: customerId || null,
+            fullName: customerName.trim(),
+            phone: normalizeDigits(phone).trim(),
+          });
 
       // تذكرة لكل قطعة، بالتتابع حتى تأخذ أرقاماً متتالية. ما حُفظ يبقى محفوظاً إن فشلت
       // قطعة لاحقة — لا نعيد إنشاءه عند إعادة المحاولة.
@@ -246,7 +279,7 @@ export default function NewTicket() {
         const ticket = await createTicket({
           customer_id: resolvedCustomerId,
           branch_id: branchId,
-          received_by: staff!.staff_id,
+          received_by: receiverId || staff!.staff_id,
           item_source: "manual",
           inventory_product_id: null,
           item_code: null,
@@ -296,11 +329,55 @@ export default function NewTicket() {
         </div>
       )}
 
-      <Steps labels={STEP_LABELS} current={step} />
+      <Steps labels={phases.map((p) => PHASE_LABELS[p])} current={step} />
 
       <div className="card p-4">
-        {/* ——— ١ الزبون ——— */}
-        {step === 0 && (
+        {/* ——— ١ النوع: للمحل أم لزبون ——— */}
+        {phase === "kind" && (
+          <div className="space-y-3">
+            <p className="text-base font-bold text-brand-800">هذه الصيانة لمن؟</p>
+            {([
+              { value: "client", title: "لزبون", hint: "قطعة أحضرها زبون للإصلاح" },
+              { value: "shop", title: "للمحل", hint: "قطعة من مخزون المحل تحتاج إصلاحاً" },
+            ] as const).map((o) => (
+              <button
+                key={o.value}
+                type="button"
+                onClick={() => setKind(o.value)}
+                className={`w-full rounded-xl border-2 px-4 py-4 text-right transition ${
+                  kind === o.value ? "border-brand-700 bg-brand-50" : "border-slate-300 bg-white"
+                }`}
+              >
+                <span className="block text-lg font-bold text-slate-900">{o.title}</span>
+                <span className="block text-sm text-slate-500">{o.hint}</span>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* ——— ٢ المستلم ——— */}
+        {phase === "receiver" && (
+          <div className="space-y-3">
+            <p className="text-base font-bold text-brand-800">من استلم القطعة؟</p>
+            <div className="grid grid-cols-2 gap-2">
+              {receivers.map((r) => (
+                <button
+                  key={r.id}
+                  type="button"
+                  onClick={() => setReceiverId(r.id)}
+                  className={`rounded-xl border-2 px-3 py-3.5 text-base font-semibold transition ${
+                    receiverId === r.id ? "border-brand-700 bg-brand-700 text-white" : "border-slate-300 bg-white text-slate-700"
+                  }`}
+                >
+                  {r.full_name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ——— الزبون ——— */}
+        {phase === "customer" && (
           <div className="space-y-4">
             <div className="relative">
               <label className="label text-base" htmlFor="phone">رقم هاتف الزبون</label>
@@ -361,7 +438,7 @@ export default function NewTicket() {
 
         {/* ——— ٢ القطع ——— */}
         {/* كم قطعة؟ ثم بطاقة لكل قطعة: اسمها، عيارها، وزنها، المطلوب، سعرها، وصورتها. */}
-        {step === 1 && (
+        {phase === "items" && (
           <div className="space-y-4">
             <div className="flex items-center justify-between gap-3 rounded-xl bg-brand-50 px-3 py-2.5">
               <span className="text-base font-bold text-brand-800">كم قطعة؟</span>
@@ -402,7 +479,7 @@ export default function NewTicket() {
 
         {/* ——— ٣ التسليم ——— */}
         {/* الموعد خيار خفيف بضغطة، ثم مراجعة كل القطع قبل الحفظ. الفرع — نادراً ما يتغيّر — في "المزيد". */}
-        {step === 2 && (
+        {phase === "delivery" && (
           <div className="space-y-5">
             {/* موعد التسليم — اختياري وخفيف */}
             <div>
@@ -458,7 +535,9 @@ export default function NewTicket() {
                 مراجعة{items.length > 1 && <span className="font-normal text-slate-500"> — {items.length} قطع في إيصال واحد</span>}
               </p>
               <dl className="space-y-1 text-slate-600">
-                <Line label="الزبون" value={`${customerName || "—"} · ${phone || "—"}`} />
+                <Line label="النوع" value={kind === "shop" ? "صيانة للمحل" : "صيانة لزبون"} />
+                <Line label="المستلم" value={receivers.find((r) => r.id === receiverId)?.full_name ?? "—"} />
+                {kind !== "shop" && <Line label="الزبون" value={`${customerName || "—"} · ${phone || "—"}`} />}
                 <Line label="التسليم" value={promisedLabel} />
                 <Line label="الفرع" value={branchName ?? "—"} />
               </dl>
@@ -511,7 +590,7 @@ export default function NewTicket() {
             رجوع
           </button>
         )}
-        {step < 2 ? (
+        {step < lastStep ? (
           <button type="button" onClick={goNext} className="btn-primary flex-1 py-4 text-base">
             التالي
           </button>

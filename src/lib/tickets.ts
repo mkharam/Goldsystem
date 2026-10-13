@@ -210,6 +210,27 @@ export async function resolveCustomer(input: {
   return created.id;
 }
 
+const SHOP_CUSTOMER_NAME = "المحل (صيانة داخلية)";
+
+/** سجل زبون واحد يمثّل المحل نفسه، تُربط به تذاكر الصيانة الداخلية. لا يُرسل للمخزون. */
+export async function getShopCustomerId(): Promise<string> {
+  const { data: existing } = await supabase
+    .from("customers")
+    .select("id")
+    .eq("full_name", SHOP_CUSTOMER_NAME)
+    .limit(1)
+    .maybeSingle();
+  if (existing) return existing.id;
+
+  const { data: created, error } = await supabase
+    .from("customers")
+    .insert({ full_name: SHOP_CUSTOMER_NAME, phone: "—" })
+    .select("id")
+    .single();
+  if (error || !created) throw new Error("تعذّر تجهيز سجل المحل");
+  return created.id;
+}
+
 export type CreateTicketInput = {
   customer_id: string;
   branch_id: string;
