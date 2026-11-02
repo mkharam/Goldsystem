@@ -90,17 +90,24 @@ export function buildRepairmanMessage(ticket: TicketWithRelations): string {
 }
 
 /**
- * يفتح محادثة واتساب مع الفني برسالة جاهزة عن القطعة. على الحاسوب يفتح واتساب ويب مباشرة
- * (بلا صفحة وسيطة)، وعلى الهاتف رابط wa.me الذي يفتح التطبيق. يعيد false إن كان الرقم غير صالح.
+ * يفتح محادثة واتساب مع الفني برسالة جاهزة عن القطعة. على الحاسوب يفتح «برنامج» واتساب المثبّت
+ * (بروتوكول whatsapp://) لا واتساب ويب — المتصفح قد يسأل مرة «فتح WhatsApp؟» فيوافَق عليه. وعلى
+ * الهاتف رابط wa.me الذي يفتح التطبيق. يعيد false إن كان الرقم غير صالح.
  */
 export function askRepairman(ticket: TicketWithRelations, phone: string = REPAIRMAN_PHONE): boolean {
   const number = whatsappNumber(phone);
   if (!number) return false;
   const text = encodeURIComponent(buildRepairmanMessage(ticket));
   const mobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-  const url = mobile
-    ? `https://wa.me/${number}?text=${text}`
-    : `https://web.whatsapp.com/send?phone=${number}&text=${text}`;
-  window.open(url, "_blank", "noopener");
+  if (mobile) {
+    window.open(`https://wa.me/${number}?text=${text}`, "_blank", "noopener");
+  } else {
+    // نقرة على رابط لا window.open: فتح بروتوكول تطبيق في تبويب جديد يترك تبويباً فارغاً.
+    const a = document.createElement("a");
+    a.href = `whatsapp://send?phone=${number}&text=${text}`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
   return true;
 }
