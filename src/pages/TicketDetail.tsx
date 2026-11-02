@@ -15,6 +15,7 @@ import { formatDateTime, formatWeight, formatMoney, overdueLabel, daysFromNow } 
 import { trackingUrl } from "@/lib/qr";
 import { compressImages, makeThumbnail } from "@/lib/image";
 import { notifyCustomer, defaultKind } from "@/lib/whatsapp";
+import { AskRepairman } from "@/components/AskRepairman";
 import type { RepairStatus, TicketWithRelations, StatusHistoryEntry, RepairPhoto } from "@/lib/types";
 
 export default function TicketDetail() {
@@ -640,6 +641,12 @@ export default function TicketDetail() {
           ))}
         </ol>
       </section>
+
+      {isOpen && (
+        <div className="mb-2">
+          <AskRepairman ticket={ticket} phone={settings?.repairman_phone} />
+        </div>
+      )}
 
       <div className="flex gap-2">
         <Link to={`/tickets/${ticket.id}/receipt`} className="btn-ghost flex-1">الإيصال</Link>

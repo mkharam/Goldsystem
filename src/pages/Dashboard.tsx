@@ -3,6 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { AppShell } from "@/components/AppShell";
 import { TicketCard } from "@/components/TicketCard";
 import { ReadyAction } from "@/components/ReadyAction";
+import { AskRepairman } from "@/components/AskRepairman";
 import { BranchPicker, useBranches } from "@/components/BranchPicker";
 import { useAuth } from "@/lib/auth";
 import { getSettings, getStatusCounts, listTickets, type StatusCounts } from "@/lib/tickets";
@@ -70,6 +71,7 @@ export default function Dashboard() {
   const [lastNotified, setLastNotified] = useState<Record<string, string>>({});
   const [reminderDays, setReminderDays] = useState(3);
   const [shopName, setShopName] = useState("");
+  const [repairmanPhone, setRepairmanPhone] = useState<string | undefined>(undefined);
   const [lowRatings, setLowRatings] = useState<{
     ticket_id: string; rating: number; comment: string | null; created_at: string;
     ticket: { ticket_number: string; item_name: string; customer: { full_name: string } | null } | null;
@@ -89,6 +91,7 @@ export default function Dashboard() {
         setCounts(c);
         setReminderDays(Number(settings.pickup_reminder_days) || 3);
         setShopName(settings.shop_name);
+        setRepairmanPhone(settings.repairman_phone);
         // تقييمات منخفضة (نجمتان فأقل) — للمدير والمشرف لا الموظف؛ RLS تحصر المشرف بفرعه.
         if (staff && staff.role !== "employee") {
           const { data: low } = await supabase
@@ -277,6 +280,9 @@ export default function Dashboard() {
                 {g.items.map((t, i) => (
                   <div key={t.id}>
                     <TicketCard ticket={t} index={i} />
+                    {(t.status === "received" || t.status === "in_progress") && (
+                      <AskRepairman ticket={t} phone={repairmanPhone} compact />
+                    )}
                     {t.status === "ready" && (
                       <ReadyAction
                         ticket={t}

@@ -486,6 +486,7 @@ const DEFAULT_SETTINGS = {
   weight_tolerance_grams: "0.05",
   default_turnaround_days: "3",
   pickup_reminder_days: "3",
+  repairman_phone: "0945600200",
   shop_name: "مجوهرات",
   receipt_footer: "يرجى الاحتفاظ بهذا الإيصال لاستلام القطعة",
 };

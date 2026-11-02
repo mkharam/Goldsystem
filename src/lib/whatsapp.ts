@@ -1,5 +1,6 @@
 import { supabase } from "./supabase";
-import { phoneDigits } from "./constants";
+import { phoneDigits, REPAIR_STATUS } from "./constants";
+import { formatWeight } from "./format";
 import { trackingUrl } from "./qr";
 import type { TicketWithRelations } from "./types";
 
@@ -66,5 +67,40 @@ export async function notifyCustomer(
     message_preview: `[${kind}] ${message}`.slice(0, 300),
     sent_by: staffId,
   });
+  return true;
+}
+
+/** رقم الفني الذي يُسأل عن القطع (يمكن تغييره من الإعدادات: repairman_phone). */
+export const REPAIRMAN_PHONE = "0945600200";
+
+export function buildRepairmanMessage(ticket: TicketWithRelations): string {
+  const details = [ticket.karat, ticket.weight_in_grams !== null ? formatWeight(ticket.weight_in_grams) : null]
+    .filter(Boolean)
+    .join(" · ");
+  const work = ticket.problem_description.replace(/\s+/g, " ").trim().slice(0, 200);
+  return [
+    "السلام عليكم، أسأل عن هذه القطعة:",
+    `القطعة: ${ticket.item_name}${details ? ` (${details})` : ""}`,
+    `رقم التذكرة: ${ticket.ticket_number}`,
+    `العمل المطلوب: ${work}`,
+    `الحالة: ${REPAIR_STATUS[ticket.status].label}`,
+    ticket.branch?.name ? `الفرع: ${ticket.branch.name}` : "",
+    "ما آخر ما وصلت إليه؟",
+  ].filter(Boolean).join("\n");
+}
+
+/**
+ * يفتح محادثة واتساب مع الفني برسالة جاهزة عن القطعة. على الحاسوب يفتح واتساب ويب مباشرة
+ * (بلا صفحة وسيطة)، وعلى الهاتف رابط wa.me الذي يفتح التطبيق. يعيد false إن كان الرقم غير صالح.
+ */
+export function askRepairman(ticket: TicketWithRelations, phone: string = REPAIRMAN_PHONE): boolean {
+  const number = whatsappNumber(phone);
+  if (!number) return false;
+  const text = encodeURIComponent(buildRepairmanMessage(ticket));
+  const mobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  const url = mobile
+    ? `https://wa.me/${number}?text=${text}`
+    : `https://web.whatsapp.com/send?phone=${number}&text=${text}`;
+  window.open(url, "_blank", "noopener");
   return true;
 }
