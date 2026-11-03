@@ -1,5 +1,6 @@
 import { supabase, signedPhotoUrls, PHOTO_BUCKET } from "./supabase";
-import { makeThumbnail } from "./image";
+import { compressImage, makeThumbnail } from "./image";
+import type { PhotoStage, RepairPhoto } from "./types";
 
 let running = false;
 
@@ -39,4 +40,48 @@ export async function backfillThumbnails(batch = 12): Promise<number> {
     running = false;
   }
   return made;
+}
+
+/**
+ * يرفع صورة لتذكرة (مضغوطة + مصغّرة) ويسجّلها، ويعيد صفّ الصورة الجديد. فشل المصغّرة لا يمنع
+ * حفظ الصورة؛ فشل الرفع الأصلي يعيد null.
+ */
+export async function uploadTicketPhoto(
+  ticketId: string,
+  file: File,
+  staffId: string,
+  stage: PhotoStage = "intake",
+): Promise<RepairPhoto | null> {
+  const full = await compressImage(file);
+  const ext = full.name.split(".").pop()?.toLowerCase() ?? "jpg";
+  const stem = `${ticketId}/${stage}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const { error } = await supabase.storage.from(PHOTO_BUCKET).upload(`${stem}.${ext}`, full, {
+    contentType: full.type || "image/jpeg",
+    cacheControl: "31536000",
+  });
+  if (error) return null;
+
+  let thumbPath: string | null = null;
+  const thumb = await makeThumbnail(full);
+  if (thumb) {
+    const { error: thumbErr } = await supabase.storage.from(PHOTO_BUCKET).upload(`${stem}-thumb.jpg`, thumb, {
+      contentType: "image/jpeg",
+      cacheControl: "31536000",
+    });
+    if (!thumbErr) thumbPath = `${stem}-thumb.jpg`;
+  }
+
+  const { data } = await supabase
+    .from("repair_photos")
+    .insert({
+      ticket_id: ticketId,
+      storage_path: `${stem}.${ext}`,
+      thumb_path: thumbPath,
+      stage,
+      uploaded_by: staffId,
+      is_public: stage !== "progress",
+    })
+    .select("*")
+    .single();
+  return (data as RepairPhoto | null) ?? null;
 }

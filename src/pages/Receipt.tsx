@@ -1,11 +1,14 @@
 import { useEffect, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { getTicket, getSettings, getPhotos, type Settings } from "@/lib/tickets";
+import { getTicket, getSettings, getPhotos, updateTicketDetails, type Settings } from "@/lib/tickets";
 import { signedPhotoUrls } from "@/lib/supabase";
+import { uploadTicketPhoto } from "@/lib/photos";
+import { useAuth } from "@/lib/auth";
+import { OPEN_STATUSES, normalizeDigits } from "@/lib/constants";
 import { formatDateTime, formatWeight, formatMoney } from "@/lib/format";
 import { qrSvg, trackingUrl } from "@/lib/qr";
 import { Logo } from "@/components/Logo";
-import type { TicketWithRelations } from "@/lib/types";
+import type { TicketWithRelations, RepairPhoto } from "@/lib/types";
 
 /**
  * إيصال فاخر كل مقاساته نسبية لعرضه (راجع ‎.a5-wrap في index.css): على الشاشة بعرض الهاتف،
@@ -20,8 +23,8 @@ export default function Receipt() {
   const [params] = useSearchParams();
   const ids = id ? [id] : (params.get("ids") ?? "").split(",").filter(Boolean);
   const [settings, setSettings] = useState<Settings | null>(null);
-  // عدة قطع: أول صفحة ملخص الزيارة (للمحل والزبون)، وبعدها تذكرة مستقلة لكل قطعة.
-  const [perTicket, setPerTicket] = useState(true);
+  // عدة قطع: فاتورة واحدة كاملة بصور القطع وتفاصيلها (الافتراضي)، ويمكن إضافة تذكرة مستقلة لكل قطعة بعدها.
+  const [perTicket, setPerTicket] = useState(false);
 
   useEffect(() => {
     getSettings().then(setSettings);
@@ -50,7 +53,7 @@ export default function Receipt() {
       {ids.length > 1 && (
         <label className="no-print mx-auto mb-4 flex max-w-[446px] items-center gap-2 px-4 text-sm text-slate-600">
           <input type="checkbox" checked={perTicket} onChange={(e) => setPerTicket(e.target.checked)} />
-          اطبع تذكرة مستقلة لكل قطعة بعد صفحة الملخص
+          أضف تذكرة مستقلة لكل قطعة بعد الفاتورة
         </label>
       )}
 
@@ -160,33 +163,45 @@ function ReceiptSheet({ id, settings }: { id: string; settings: Settings }) {
   );
 }
 
-type Piece = { ticket: TicketWithRelations; photo: string | null };
+/** قطعة في الفاتورة المجمّعة: بياناتها وكل صورها وأيّها تُطبع (chosen). */
+type Piece = {
+  ticket: TicketWithRelations;
+  photos: RepairPhoto[];
+  urls: Record<string, string>;
+  chosen: string | null;
+};
+
+const defaultPhotoId = (photos: RepairPhoto[]) => (photos.find((p) => p.stage === "intake") ?? photos[0])?.id ?? null;
 
 /**
  * إيصال واحد لكل قطع الزبون — بطاقة فاخرة لا فاتورة: بيانات الزبون مع رمز QR واحد
  * (يفتح صفحة متابعة تعرض كل قطع هذه الزيارة)، ثم القطع كصفوف أنيقة بصورها، ثم الإجمالي.
  */
 function CombinedSheet({ ids, settings }: { ids: string[]; settings: Settings }) {
+  const { staff } = useAuth();
   const [pieces, setPieces] = useState<Piece[] | null>(null);
   const [qr, setQr] = useState("");
+  const [editing, setEditing] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
       const loaded = await Promise.all(ids.map(async (id) => {
         const [ticket, photos] = await Promise.all([getTicket(id), getPhotos(id)]);
-        const first = photos.find((p) => p.stage === "intake") ?? photos[0];
-        return { ticket, path: first?.storage_path ?? null };
+        return { ticket, photos };
       }));
-      const valid: { ticket: TicketWithRelations; path: string | null }[] = [];
-      for (const x of loaded) if (x.ticket) valid.push({ ticket: x.ticket, path: x.path });
-      const urls = await signedPhotoUrls(valid.map((x) => x.path).filter((p): p is string => !!p));
-      const out = valid.map(({ ticket, path }) => ({ ticket, photo: path ? urls[path] ?? null : null }));
+      const valid = loaded.filter((x): x is { ticket: TicketWithRelations; photos: RepairPhoto[] } => !!x.ticket);
+      const paths = valid.flatMap((x) => x.photos.flatMap((p) => (p.thumb_path ? [p.storage_path, p.thumb_path] : [p.storage_path])));
+      const urls = await signedPhotoUrls(paths);
+      const out: Piece[] = valid.map(({ ticket, photos }) => ({ ticket, photos, urls, chosen: defaultPhotoId(photos) }));
       // بترتيب رقم التذكرة — نفس ترتيب إدخالها.
       out.sort((a, b) => a.ticket.ticket_number.localeCompare(b.ticket.ticket_number, undefined, { numeric: true }));
       setPieces(out);
       if (out[0]) setQr(await qrSvg(trackingUrl(out[0].ticket.tracking_token), 150));
     })();
   }, [ids.join(",")]);
+
+  const updatePiece = (id: string, patch: Partial<Piece>) =>
+    setPieces((list) => (list ? list.map((p) => (p.ticket.id === id ? { ...p, ...patch } : p)) : list));
 
   if (!pieces) return <div className="a5-wrap h-40 animate-pulse rounded-lg bg-slate-100 no-print" />;
   if (!pieces.length) return <div className="p-8 text-center text-slate-400">لا توجد تذاكر</div>;
@@ -235,11 +250,23 @@ function CombinedSheet({ ids, settings }: { ids: string[]; settings: Settings })
 
       <div className="a5-pieces">
         <p className="a5-title">القطع</p>
-        {pieces.map(({ ticket: t, photo }, i) => (
-          <div key={t.id} className="a5-piece">
+        {pieces.map((piece, i) => {
+          const { ticket: t } = piece;
+          const chosenPhoto = piece.photos.find((p) => p.id === piece.chosen);
+          const photo = chosenPhoto ? piece.urls[chosenPhoto.storage_path] ?? null : null;
+          return (
+          <div key={t.id}>
+          <div className="a5-piece">
             <div className="a5-piece-photo">
               {photo ? <img src={photo} alt="" /> : <Logo size={40} className="a5-piece-logo" />}
               <span className="a5-piece-num">{i + 1}</span>
+              <button
+                type="button"
+                onClick={() => setEditing(editing === t.id ? null : t.id)}
+                className="no-print absolute -bottom-2 left-1/2 -translate-x-1/2 rounded-full border border-gold-500 bg-white px-2 py-0.5 text-[10px] font-bold text-brand-800 shadow"
+              >
+                {editing === t.id ? "إغلاق" : "تعديل"}
+              </button>
             </div>
             <div className="a5-piece-body">
               <p className="a5-piece-name">{t.item_name}</p>
@@ -253,7 +280,17 @@ function CombinedSheet({ ids, settings }: { ids: string[]; settings: Settings })
               <span dir="ltr">{t.ticket_number}</span>
             </div>
           </div>
-        ))}
+          {editing === t.id && staff && (
+            <PieceEditor
+              piece={piece}
+              staffId={staff.staff_id}
+              onPiece={(patch) => updatePiece(t.id, patch)}
+              onClose={() => setEditing(null)}
+            />
+          )}
+          </div>
+          );
+        })}
 
         <div className="a5-price a5-total">
           <span>
@@ -269,6 +306,107 @@ function CombinedSheet({ ids, settings }: { ids: string[]; settings: Settings })
         <p>{settings.receipt_footer}</p>
       </footer>
     </div>
+    </div>
+  );
+}
+
+/**
+ * تعديل قطعة داخل الفاتورة قبل الطباعة (لا يُطبع): اختيار أي صورة تظهر، أو إضافة صورة جديدة،
+ * وتصحيح الاسم والعمل المطلوب والسعر. التعديل يُحفظ في التذكرة نفسها ويُسجَّل في سجلّها.
+ */
+function PieceEditor({
+  piece, staffId, onPiece, onClose,
+}: {
+  piece: Piece;
+  staffId: string;
+  onPiece: (patch: Partial<Piece>) => void;
+  onClose: () => void;
+}) {
+  const t = piece.ticket;
+  const editable = OPEN_STATUSES.includes(t.status);
+  const [name, setName] = useState(t.item_name);
+  const [work, setWork] = useState(t.problem_description);
+  const [cost, setCost] = useState(t.estimated_cost !== null ? String(t.estimated_cost) : "");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  async function addPhoto(files: FileList | null) {
+    const file = files?.[0];
+    if (!file) return;
+    setBusy(true);
+    setMsg(null);
+    const photo = await uploadTicketPhoto(t.id, file, staffId, "intake");
+    if (!photo) {
+      setMsg("تعذّر رفع الصورة");
+    } else {
+      const urls = await signedPhotoUrls([photo.storage_path, ...(photo.thumb_path ? [photo.thumb_path] : [])]);
+      onPiece({ photos: [...piece.photos, photo], urls: { ...piece.urls, ...urls }, chosen: photo.id });
+    }
+    setBusy(false);
+  }
+
+  async function save() {
+    if (!name.trim() || !work.trim()) return setMsg("الاسم والعمل المطلوب لا يمكن أن يكونا فارغين");
+    setBusy(true);
+    setMsg(null);
+    const result = await updateTicketDetails(t.id, staffId, {
+      item_name: name.trim(),
+      problem_description: work.trim(),
+      estimated_cost: cost.trim() ? Number(normalizeDigits(cost)) : null,
+    });
+    if (!result.ok) {
+      setMsg(result.error);
+    } else {
+      const fresh = await getTicket(t.id);
+      if (fresh) onPiece({ ticket: fresh });
+      setMsg(result.changed ? "تم الحفظ" : "لا يوجد تغيير");
+    }
+    setBusy(false);
+  }
+
+  return (
+    <div className="no-print my-2 space-y-3 rounded-xl border border-gold-300 bg-gold-50 p-3 text-sm" dir="rtl">
+      <div>
+        <p className="mb-1.5 font-semibold text-slate-700">الصورة المطبوعة</p>
+        <div className="flex flex-wrap gap-2">
+          {piece.photos.map((p) => {
+            const src = piece.urls[p.thumb_path ?? p.storage_path];
+            return (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => onPiece({ chosen: p.id })}
+                className={`h-16 w-16 overflow-hidden rounded-lg border-2 ${piece.chosen === p.id ? "border-brand-700" : "border-slate-200"}`}
+              >
+                {src && <img src={src} alt="" className="h-full w-full object-cover" />}
+              </button>
+            );
+          })}
+          <label className="flex h-16 w-16 cursor-pointer items-center justify-center rounded-lg border-2 border-dashed border-slate-300 bg-white text-center text-[11px] text-slate-500">
+            {busy ? "…" : "+ صورة"}
+            <input type="file" accept="image/*" capture="environment" className="hidden" disabled={busy || !editable}
+              onChange={(e) => { void addPhoto(e.target.files); e.target.value = ""; }} />
+          </label>
+        </div>
+        {piece.photos.length === 0 && <p className="mt-1 text-xs text-slate-500">لا توجد صورة لهذه القطعة — أضف واحدة لتظهر في الفاتورة.</p>}
+      </div>
+
+      {editable ? (
+        <div className="space-y-2">
+          <input className="field" value={name} onChange={(e) => setName(e.target.value)} placeholder="اسم القطعة" aria-label="اسم القطعة" />
+          <textarea className="field" rows={2} value={work} onChange={(e) => setWork(e.target.value)} placeholder="العمل المطلوب" aria-label="العمل المطلوب" />
+          <input className="field text-left" dir="ltr" inputMode="decimal" value={cost}
+            onChange={(e) => setCost(normalizeDigits(e.target.value))} placeholder="السعر التقريبي" aria-label="السعر التقريبي" />
+        </div>
+      ) : (
+        <p className="text-xs text-slate-500">لا يمكن تعديل بيانات تذكرة مسلّمة أو ملغاة — الصورة فقط.</p>
+      )}
+
+      {msg && <p className="text-xs font-medium text-brand-800">{msg}</p>}
+      <div className="flex gap-2">
+        {editable && <button type="button" onClick={save} disabled={busy} className="btn-success flex-1 py-2">حفظ التعديل</button>}
+        <button type="button" onClick={onClose} className="btn-ghost flex-1 py-2">تم</button>
+      </div>
     </div>
   );
 }

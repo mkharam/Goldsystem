@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { AppShell } from "@/components/AppShell";
 import { StatusBadge } from "@/components/StatusBadge";
 import { useAuth } from "@/lib/auth";
@@ -22,6 +22,7 @@ export default function TicketDetail() {
   const { id } = useParams<{ id: string }>();
   const { staff } = useAuth();
   const toast = useToast();
+  const navigate = useNavigate();
 
   const [ticket, setTicket] = useState<TicketWithRelations | null>(null);
   const [history, setHistory] = useState<StatusHistoryEntry[]>([]);
@@ -209,6 +210,21 @@ export default function TicketDetail() {
     await reload();
     buzz();
     toast(result.changed ? "تم حفظ التعديل" : "لا يوجد تغيير");
+  }
+
+  // فاتورة واحدة بكل قطع هذا الزبون المفتوحة (صور وتفاصيل كل قطعة في ورقة واحدة)، حتى لو استُلمت
+  // في أيام مختلفة.
+  async function openCombinedInvoice() {
+    if (!ticket) return;
+    const { data } = await supabase
+      .from("repair_tickets")
+      .select("id, ticket_number")
+      .eq("customer_id", ticket.customer_id)
+      .in("status", OPEN_STATUSES)
+      .order("received_at", { ascending: true });
+    const ids = (data ?? []).map((r) => r.id);
+    if (ids.length < 2) return toast("لا توجد قطع مفتوحة أخرى لهذا الزبون");
+    navigate(`/receipts?ids=${ids.join(",")}`);
   }
 
   async function notifyWhatsApp() {
@@ -647,6 +663,10 @@ export default function TicketDetail() {
           <AskRepairman ticket={ticket} phone={settings?.repairman_phone} />
         </div>
       )}
+
+      <button type="button" onClick={openCombinedInvoice} className="btn-ghost mb-2 w-full">
+        فاتورة واحدة لكل قطع الزبون
+      </button>
 
       <div className="flex gap-2">
         <Link to={`/tickets/${ticket.id}/receipt`} className="btn-ghost flex-1">الإيصال</Link>
