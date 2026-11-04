@@ -391,6 +391,48 @@
   align-items: center;
   gap: calc(1.5 * var(--u));
 }
+/* أثناء تصدير الإيصال لصورة فقط (printImage.ts): خطوط الزخرفة الرفيعة سادة بسماكة بكسل. */
+.a5-exporting .a5-ornament::before,
+.a5-exporting .a5-ornament::after,
+.a5-exporting .a5-title::after {
+  height: 1px !important;
+  background-image: none !important;
+  background-color: theme("colors.gold.400") !important;
+}
+/* html2canvas يفكّ وصل الحروف العربية عند وجود letter-spacing، ويقصّ نصّ line-clamp. */
+.a5-exporting,
+.a5-exporting * {
+  letter-spacing: 0 !important;
+}
+.a5-exporting .a5-clamp {
+  display: block !important;
+  -webkit-line-clamp: unset !important;
+  overflow: visible !important;
+}
+/* html2canvas يرسم النص أخفض قليلاً حين يكون line-height أصغر من ارتفاع الخط. */
+.a5-exporting .a5-shop,
+.a5-exporting .a5-ornament,
+.a5-exporting .a5-medal small,
+.a5-exporting .a5-medal b,
+.a5-exporting .a5-piece-num,
+.a5-exporting .a5-price b,
+.a5-exporting .a5-piece-price b {
+  line-height: 1.5 !important;
+}
+/* النص المرسوم أخفض قليلاً من موضعه — نترك مسافة تحت سطر «إيصال استلام» حتى لا تغطّيه الميدالية. */
+.a5-exporting .a5-ornament {
+  margin-bottom: 18px !important;
+}
+.a5-exporting .a5-piece-num {
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+}
+.a5-exporting .a5-piece {
+  border-image: none !important;
+  border-bottom: 1px solid theme("colors.gold.300") !important;
+}
+
 .a5-title::after {
   content: "";
   flex: 1;

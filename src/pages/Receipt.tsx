@@ -5,6 +5,7 @@ import { signedPhotoUrls } from "@/lib/supabase";
 import { uploadTicketPhoto } from "@/lib/photos";
 import { useAuth } from "@/lib/auth";
 import { OPEN_STATUSES, normalizeDigits } from "@/lib/constants";
+import { isIosStandalone, renderSheetsToFiles, shareFiles } from "@/lib/printImage";
 import { formatDateTime, formatWeight, formatMoney } from "@/lib/format";
 import { qrSvg, trackingUrl } from "@/lib/qr";
 import { Logo } from "@/components/Logo";
@@ -30,11 +31,51 @@ export default function Receipt() {
     getSettings().then(setSettings);
   }, []);
 
-  // لا نطبع قبل اكتمال تحميل كل الصور، وإلا خرج الإيصال بمربع فارغ.
-  async function print() {
+  const waitImages = async () => {
     const pending = Array.from(document.images).filter((img) => !img.complete);
     await Promise.all(pending.map((img) => new Promise((resolve) => { img.onload = img.onerror = resolve; })));
+  };
+
+  // لا نطبع قبل اكتمال تحميل كل الصور، وإلا خرج الإيصال بمربع فارغ.
+  async function print() {
+    await waitImages();
     window.print();
+  }
+
+  // تطبيق iOS المثبَّت لا يطبع بـwindow.print()، فنجهّز صور الأوراق أولاً (خطوة)، ثم تفتح قائمة
+  // المشاركة بنقرة ثانية (iOS يرفض المشاركة إن تأخّرت عن النقرة بسبب زمن الرسم).
+  const iosApp = isIosStandalone();
+  const [shareFilesReady, setShareFilesReady] = useState<File[] | null>(null);
+  const [preparing, setPreparing] = useState(false);
+  const [shareMsg, setShareMsg] = useState<string | null>(null);
+
+  async function prepareShare() {
+    setPreparing(true);
+    setShareMsg(null);
+    try {
+      await waitImages();
+      const sheets = Array.from(document.querySelectorAll<HTMLElement>(".a5-sheet"));
+      const files = await renderSheetsToFiles(sheets, "invoice");
+      if (!files.length) setShareMsg("تعذّر تجهيز الفاتورة");
+      else setShareFilesReady(files);
+    } catch (e) {
+      console.error("print-prepare failed", e);
+      setShareMsg("تعذّر تجهيز الفاتورة — حاول مرة أخرى");
+    }
+    setPreparing(false);
+  }
+
+  async function shareNow() {
+    if (!shareFilesReady) return;
+    try {
+      const shared = await shareFiles(shareFilesReady, "فاتورة");
+      if (!shared) {
+        // الجهاز لا يشارك الملفات: نفتح الصورة ليضغط الموظف مشاركة ← طباعة من هناك.
+        window.open(URL.createObjectURL(shareFilesReady[0]), "_blank");
+      }
+    } catch {
+      setShareMsg("تعذّرت المشاركة");
+    }
   }
 
   if (!settings || ids.length === 0) {
@@ -47,8 +88,28 @@ export default function Receipt() {
         <Link to={ids.length === 1 ? `/tickets/${ids[0]}` : "/"} className="btn-ghost flex-1">
           {ids.length === 1 ? "التذكرة" : "الرئيسية"}
         </Link>
-        <button type="button" onClick={print} className="btn-primary flex-1">طباعة</button>
+        {iosApp ? (
+          shareFilesReady ? (
+            <button type="button" onClick={shareNow} className="btn-primary flex-1">طباعة</button>
+          ) : (
+            <button type="button" onClick={prepareShare} disabled={preparing} className="btn-primary flex-1">
+              {preparing ? "جارٍ التجهيز…" : "تجهيز للطباعة"}
+            </button>
+          )
+        ) : (
+          <button type="button" onClick={print} className="btn-primary flex-1">طباعة</button>
+        )}
       </div>
+      {iosApp && (
+        <p className="no-print mx-auto mb-3 max-w-[446px] px-4 text-center text-xs text-slate-500">
+          {shareMsg ?? (shareFilesReady
+            ? "اضغط «طباعة» ثم اختر «طباعة» من قائمة المشاركة."
+            : "على الآيفون: اضغط «تجهيز للطباعة»، ثم «طباعة» واختر الطباعة من القائمة.")}
+          {shareFilesReady && (
+            <button type="button" onClick={() => setShareFilesReady(null)} className="mr-2 underline">تحديث بعد تعديل</button>
+          )}
+        </p>
+      )}
 
       {ids.length > 1 && (
         <label className="no-print mx-auto mb-4 flex max-w-[446px] items-center gap-2 px-4 text-sm text-slate-600">
