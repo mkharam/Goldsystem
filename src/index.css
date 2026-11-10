@@ -196,7 +196,20 @@
     padding-top: 7mm;
   }
 
-  .a5-sheet {
+  /* الإيصال يملأ الورقة بالكامل: الارتفاع بنسبة العرض (134×194 مم) لا بالمليمتر، لأن سفاري
+     آيفون يصغّر الصفحة عند الطباعة فيتجاهل min-height بالمليمتر. والمحتوى يتمدّد ليملأ
+     الطول، والتذييل الأخضر ينزل لأسفل الورقة. */
+  .a5-sheet:not(.a5-multi) {
+    aspect-ratio: 134 / 194;
+    min-height: 0;
+    max-height: none;
+  }
+  .a5-sheet:not(.a5-multi) .a5-body {
+    flex: 1;
+    align-content: center;
+    font-size: 1.12em;
+  }
+  .a5-multi {
     min-height: 194mm;
   }
 
