@@ -145,7 +145,7 @@ function ReceiptSheet({ id, settings }: { id: string; settings: Settings }) {
             <>
               <div className="a5-frame">
                 <div className="a5-photo">
-                  <img src={photo} alt="صورة القطعة" />
+                  <PrintableImg src={photo} alt="صورة القطعة" />
                 </div>
               </div>
               <p className="a5-caption">صورة القطعة عند الاستلام</p>
@@ -262,7 +262,7 @@ function CombinedSheet({ ids, settings }: { ids: string[]; settings: Settings })
           <div key={t.id}>
           <div className="a5-piece">
             <div className="a5-piece-photo">
-              {photo ? <img src={photo} alt="" /> : <Logo size={40} className="a5-piece-logo" />}
+              {photo ? <PrintableImg src={photo} alt="" /> : <Logo size={40} className="a5-piece-logo" />}
               <span className="a5-piece-num">{i + 1}</span>
               <button
                 type="button"
@@ -434,4 +434,38 @@ function Row({ label, value, ltr, clamp }: { label: string; value: string; ltr?:
       <dd dir={ltr ? "ltr" : undefined} className={clamp ? "a5-clamp" : undefined}>{value}</dd>
     </div>
   );
+}
+
+/**
+ * سفاري آيفون لا يطبع الصورة من رابطها الموقّع (أصل آخر، وحجمها كبير) فتخرج فارغة على الورق
+ * رغم ظهورها على الشاشة. نحمّلها مرة، ونصغّرها، ونضمّنها في الصفحة كـ data URL فتُطبع دائماً.
+ */
+function PrintableImg({ src, alt }: { src: string; alt: string }) {
+  const [data, setData] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    setData(null);
+    (async () => {
+      try {
+        const res = await fetch(src, { mode: "cors" });
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const img = new Image();
+        img.src = url;
+        await img.decode();
+        const max = 1200;
+        const k = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+        const c = document.createElement("canvas");
+        c.width = Math.round(img.naturalWidth * k);
+        c.height = Math.round(img.naturalHeight * k);
+        c.getContext("2d")?.drawImage(img, 0, 0, c.width, c.height);
+        URL.revokeObjectURL(url);
+        if (alive) setData(c.toDataURL("image/jpeg", 0.88));
+      } catch {
+        // نبقي الرابط الأصلي إن تعذّر التحويل.
+      }
+    })();
+    return () => { alive = false; };
+  }, [src]);
+  return <img src={data ?? src} alt={alt} />;
 }
