@@ -24,12 +24,45 @@ const toDataUrl = (blob: Blob) =>
     r.readAsDataURL(blob);
   });
 
+/** صورة من أصل آخر عبر <img crossOrigin> ثم لوحة — بديل إن فشل fetch. يعيد null إن تعذّر. */
+const viaImageElement = (src: string) =>
+  new Promise<string | null>((resolve) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      try {
+        const c = document.createElement("canvas");
+        c.width = img.naturalWidth;
+        c.height = img.naturalHeight;
+        c.getContext("2d")?.drawImage(img, 0, 0);
+        resolve(c.toDataURL("image/jpeg", 0.92));
+      } catch {
+        resolve(null);
+      }
+    };
+    img.onerror = () => resolve(null);
+    img.src = src;
+  });
+
+async function inlineImage(src: string): Promise<string | null> {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const res = await fetch(src, { mode: "cors", cache: attempt ? "reload" : "default" });
+      if (res.ok) return await toDataUrl(await res.blob());
+    } catch { /* نعيد المحاولة ثم البديل */ }
+  }
+  return viaImageElement(src);
+}
+
 /**
  * يرسم كل ورقة إلى ملف PNG. صور الإيصال تأتي من روابط موقّعة من Supabase (أصل آخر): نجلبها نحن
- * أولاً كـdata URL حتى لا «تلوّث» اللوحة فيفشل التصدير؛ وما تعذّر جلبه (CORS) يُحذف من الصورة
- * المُصدَّرة فقط ولا يمسّ ما يُعرض على الشاشة.
+ * أولاً كـdata URL حتى لا «تلوّث» اللوحة فيفشل التصدير. `missing` عدد الصور التي تعذّر تضمينها
+ * (تُحذف من الصورة المصدّرة فقط)، ليُنبَّه الموظف بدل أن تغيب بصمت.
  */
-export async function renderSheetsToFiles(sheets: HTMLElement[], baseName: string): Promise<File[]> {
+export async function renderSheetsToFiles(
+  sheets: HTMLElement[],
+  baseName: string,
+): Promise<{ files: File[]; missing: number }> {
   const { default: html2canvas } = await import("html2canvas");
 
   const inline = new Map<string, string>();
@@ -41,12 +74,11 @@ export async function renderSheetsToFiles(sheets: HTMLElement[], baseName: strin
   }
   await Promise.all(
     [...srcs].map(async (src) => {
-      try {
-        const res = await fetch(src, { mode: "cors" });
-        if (res.ok) inline.set(src, await toDataUrl(await res.blob()));
-      } catch { /* يُحذف من الصورة المصدّرة */ }
+      const data = await inlineImage(src);
+      if (data) inline.set(src, data);
     }),
   );
+  const missing = [...srcs].filter((src) => !inline.has(src)).length;
 
   // html2canvas يقرأ أنماط ::before/::after من الصفحة الحيّة لا من نسختها، ويفشل (createPattern على
   // لوحة صفرية) مع خطوط الزخرفة الأقل من بكسل وتدرّجاتها وborder-image. هذا الصنف يحوّلها لخطوط
@@ -54,31 +86,31 @@ export async function renderSheetsToFiles(sheets: HTMLElement[], baseName: strin
   sheets.forEach((el) => el.classList.add("a5-exporting"));
   const files: File[] = [];
   try {
-  for (let i = 0; i < sheets.length; i++) {
-    const el = sheets[i];
-    // ورقة طويلة (قطع كثيرة) بدقة أقل حتى لا تتجاوز ذاكرة اللوحة في iOS.
-    const scale = el.offsetHeight > 1600 ? 2 : 3;
-    const canvas = await html2canvas(el, {
-      scale,
-      backgroundColor: "#ffffff",
-      useCORS: true,
-      logging: false,
-      ignoreElements: (node) => node instanceof HTMLElement && node.classList.contains("no-print"),
-      onclone: (doc) => {
-        doc.querySelectorAll("img").forEach((img) => {
-          const data = inline.get(img.src);
-          if (data) img.src = data;
-          else if (/^https?:/i.test(img.src) && new URL(img.src).origin !== location.origin) img.remove();
-        });
-      },
-    });
-    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
-    if (blob) files.push(new File([blob], `${baseName}-${i + 1}.png`, { type: "image/png" }));
-  }
+    for (let i = 0; i < sheets.length; i++) {
+      const el = sheets[i];
+      // ورقة طويلة (قطع كثيرة) بدقة أقل حتى لا تتجاوز ذاكرة اللوحة في iOS.
+      const scale = el.offsetHeight > 1600 ? 2 : 3;
+      const canvas = await html2canvas(el, {
+        scale,
+        backgroundColor: "#ffffff",
+        useCORS: true,
+        logging: false,
+        ignoreElements: (node) => node instanceof HTMLElement && node.classList.contains("no-print"),
+        onclone: (doc) => {
+          doc.querySelectorAll("img").forEach((img) => {
+            const data = inline.get(img.src);
+            if (data) img.src = data;
+            else if (/^https?:/i.test(img.src) && new URL(img.src).origin !== location.origin) img.remove();
+          });
+        },
+      });
+      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
+      if (blob) files.push(new File([blob], `${baseName}-${i + 1}.png`, { type: "image/png" }));
+    }
   } finally {
     sheets.forEach((el) => el.classList.remove("a5-exporting"));
   }
-  return files;
+  return { files, missing };
 }
 
 /** يفتح قائمة المشاركة (فيها «طباعة»). يعيد false إن لم يدعم الجهاز مشاركة الملفات. */
