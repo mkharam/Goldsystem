@@ -5,7 +5,6 @@ import { signedPhotoUrls } from "@/lib/supabase";
 import { uploadTicketPhoto } from "@/lib/photos";
 import { useAuth } from "@/lib/auth";
 import { OPEN_STATUSES, normalizeDigits } from "@/lib/constants";
-import { isIosStandalone, renderSheetsToFiles, shareFiles } from "@/lib/printImage";
 import { formatDateTime, formatWeight, formatMoney } from "@/lib/format";
 import { qrSvg, trackingUrl } from "@/lib/qr";
 import { Logo } from "@/components/Logo";
@@ -42,55 +41,6 @@ export default function Receipt() {
     window.print();
   }
 
-  // تطبيق iOS المثبَّت: نجرّب نافذة الطباعة الأصلية أولاً (window.print). إن لم تظهر خلال لحظة
-  // (يتجاهلها بعض الإصدارات داخل التطبيق المثبَّت)، نعرض معاينة كاملة للفاتورة بصورها كصورة،
-  // وزر «طباعة» فيها يفتح قائمة المشاركة وفيها «طباعة» (لا طريقة أخرى تسمح بها iOS هنا).
-  const iosApp = isIosStandalone();
-  const [preview, setPreview] = useState<{ files: File[]; urls: string[]; missing: number } | null>(null);
-  const [preparing, setPreparing] = useState(false);
-  const [printMsg, setPrintMsg] = useState<string | null>(null);
-
-  async function printIos() {
-    setPrintMsg(null);
-    setPreparing(true);
-    await waitImages();
-    let fired = false;
-    const onBefore = () => { fired = true; };
-    window.addEventListener("beforeprint", onBefore);
-    window.print();
-    await new Promise((r) => setTimeout(r, 900));
-    window.removeEventListener("beforeprint", onBefore);
-    if (fired) {
-      setPreparing(false);
-      return;
-    }
-    try {
-      const sheets = Array.from(document.querySelectorAll<HTMLElement>(".a5-sheet"));
-      const { files, missing } = await renderSheetsToFiles(sheets, "invoice");
-      if (!files.length) setPrintMsg("تعذّر تجهيز الفاتورة");
-      else setPreview({ files, urls: files.map((f) => URL.createObjectURL(f)), missing });
-    } catch (e) {
-      console.error("print-prepare failed", e);
-      setPrintMsg("تعذّر تجهيز الفاتورة — حاول مرة أخرى");
-    }
-    setPreparing(false);
-  }
-
-  function closePreview() {
-    preview?.urls.forEach((u) => URL.revokeObjectURL(u));
-    setPreview(null);
-  }
-
-  async function sharePreview() {
-    if (!preview) return;
-    try {
-      const shared = await shareFiles(preview.files, "فاتورة");
-      if (!shared) setPrintMsg("جهازك لا يدعم المشاركة — اضغط مطوّلاً على الصورة واختر «طباعة»");
-    } catch {
-      setPrintMsg("تعذّرت المشاركة");
-    }
-  }
-
   if (!settings || ids.length === 0) {
     return <div className="p-8 text-center text-slate-400">جارٍ التحميل…</div>;
   }
@@ -101,40 +51,8 @@ export default function Receipt() {
         <Link to={ids.length === 1 ? `/tickets/${ids[0]}` : "/"} className="btn-ghost flex-1">
           {ids.length === 1 ? "التذكرة" : "الرئيسية"}
         </Link>
-        {iosApp ? (
-          <button type="button" onClick={printIos} disabled={preparing} className="btn-primary flex-1">
-            {preparing ? "جارٍ التجهيز…" : "طباعة"}
-          </button>
-        ) : (
-          <button type="button" onClick={print} className="btn-primary flex-1">طباعة</button>
-        )}
+        <button type="button" onClick={print} className="btn-primary flex-1">طباعة</button>
       </div>
-      {iosApp && printMsg && !preview && (
-        <p className="no-print mx-auto mb-3 max-w-[446px] px-4 text-center text-xs text-red-600">{printMsg}</p>
-      )}
-
-      {preview && (
-        <div className="no-print fixed inset-0 z-50 flex flex-col bg-slate-900/95">
-          <div className="flex items-center justify-between gap-2 px-4 py-3 text-white">
-            <button type="button" onClick={closePreview} className="rounded-lg border border-white/30 px-3 py-1.5 text-sm">إغلاق</button>
-            <p className="text-sm font-semibold">معاينة الفاتورة</p>
-            <button type="button" onClick={sharePreview} className="rounded-lg bg-gold-500 px-4 py-1.5 text-sm font-bold text-brand-950">طباعة</button>
-          </div>
-          {(preview.missing > 0 || printMsg) && (
-            <p className="mx-4 mb-2 rounded-lg bg-red-500/90 px-3 py-2 text-center text-xs text-white">
-              {printMsg ?? `تعذّر تضمين ${preview.missing} صورة في الفاتورة — تأكد من الاتصال وأعد المحاولة`}
-            </p>
-          )}
-          <div className="flex-1 space-y-3 overflow-y-auto px-3 pb-6">
-            {preview.urls.map((u, i) => (
-              <img key={u} src={u} alt={`الفاتورة ${i + 1}`} className="mx-auto w-full max-w-[446px] rounded-lg bg-white shadow-lg" />
-            ))}
-          </div>
-          <p className="px-4 pb-4 text-center text-[11px] text-white/60">
-            اضغط «طباعة» ثم اختر «طباعة» من قائمة المشاركة.
-          </p>
-        </div>
-      )}
 
       {ids.length > 1 && (
         <label className="no-print mx-auto mb-4 flex max-w-[446px] items-center gap-2 px-4 text-sm text-slate-600">
