@@ -1,6 +1,6 @@
 import { lazy, Suspense } from "react";
 import { PullToRefresh } from "@/components/PullToRefresh";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, useLocation, Route, Routes } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import { ToastProvider } from "@/lib/toast";
 import Login from "@/pages/Login";
@@ -23,6 +23,7 @@ function PageFallback() {
 
 function Protected({ children }: { children: React.ReactNode }) {
   const { staff, loading } = useAuth();
+  const location = useLocation();
 
   // بلا هذا الانتظار تومض صفحة الدخول للحظة عند كل تحديث قبل أن تُقرأ الجلسة.
   if (loading) {
@@ -31,7 +32,7 @@ function Protected({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (!staff) return <Navigate to="/login" replace />;
+  if (!staff) return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />;
   return <>{children}</>;
 }
 

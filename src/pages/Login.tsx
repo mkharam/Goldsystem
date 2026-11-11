@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { Navigate } from "react-router-dom";
+import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { supabase, FUNCTIONS_URL } from "@/lib/supabase";
 import { Logo } from "@/components/Logo";
@@ -7,6 +7,8 @@ import { getTheme } from "@/lib/theme";
 
 export default function Login() {
   const { staff, loading, signIn } = useAuth();
+  // بعد الدخول نرجع للصفحة المطلوبة (مثل إيصال فُتح في سفاري للطباعة)، لا للرئيسية دائماً.
+  const from = (useLocation().state as { from?: string } | null)?.from ?? "/";
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -14,7 +16,7 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  if (!loading && staff) return <Navigate to="/" replace />;
+  if (!loading && staff) return <Navigate to={from} replace />;
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
