@@ -30,15 +30,16 @@ export default function Receipt() {
     getSettings().then(setSettings);
   }, []);
 
-  const waitImages = async () => {
+  // آيفون لا يفتح نافذة الطباعة إلا إذا استُدعيت مباشرة من ضغطة الزر (بلا انتظار قبلها)،
+  // فنطبع فوراً. وإن كانت صورة لم تكتمل بعد ننتظرها ثم نطبع (يعمل على الكمبيوتر والأندرويد).
+  function print() {
     const pending = Array.from(document.images).filter((img) => !img.complete);
-    await Promise.all(pending.map((img) => new Promise((resolve) => { img.onload = img.onerror = resolve; })));
-  };
-
-  // لا نطبع قبل اكتمال تحميل كل الصور، وإلا خرج الإيصال بمربع فارغ.
-  async function print() {
-    await waitImages();
-    window.print();
+    if (!pending.length) {
+      window.print();
+      return;
+    }
+    Promise.all(pending.map((img) => new Promise((resolve) => { img.onload = img.onerror = resolve; })))
+      .then(() => window.print());
   }
 
   if (!settings || ids.length === 0) {
