@@ -1,4 +1,5 @@
 import { lazy, Suspense } from "react";
+import { PullToRefresh } from "@/components/PullToRefresh";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import { ToastProvider } from "@/lib/toast";
@@ -40,6 +41,7 @@ export default function App() {
     <AuthProvider>
       {/* basename يجعل المسارات تعمل تحت /Goldsystem/ على GitHub Pages ومن الجذر محلياً. */}
       <BrowserRouter basename={import.meta.env.BASE_URL}>
+        <PullToRefresh />
         <ResumeRoute />
         <Suspense fallback={<PageFallback />}>
           <Routes>
