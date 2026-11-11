@@ -30,17 +30,18 @@ export default function Receipt() {
     getSettings().then(setSettings);
   }, []);
 
-  // آيفون لا يفتح نافذة الطباعة إلا إذا استُدعيت مباشرة من ضغطة الزر (بلا انتظار قبلها)،
-  // فنطبع فوراً. وإن كانت صورة لم تكتمل بعد ننتظرها ثم نطبع (يعمل على الكمبيوتر والأندرويد).
-  function print() {
-    const pending = Array.from(document.images).filter((img) => !img.complete);
-    if (!pending.length) {
-      window.print();
-      return;
-    }
-    Promise.all(pending.map((img) => new Promise((resolve) => { img.onload = img.onerror = resolve; })))
-      .then(() => window.print());
-  }
+  // آيفون لا يفتح نافذة الطباعة إلا إذا استُدعيت مباشرة من ضغطة الزر بلا أي انتظار، فلا ننتظر
+  // شيئاً عند الضغط: الزر يبقى معطّلاً حتى تكتمل كل الصور، ثم يطبع فوراً.
+  const [imagesReady, setImagesReady] = useState(false);
+  useEffect(() => {
+    const check = () => {
+      const imgs = Array.from(document.images);
+      setImagesReady(imgs.length > 0 && imgs.every((img) => img.complete));
+    };
+    check();
+    const t = window.setInterval(check, 400);
+    return () => window.clearInterval(t);
+  }, []);
 
   if (!settings || ids.length === 0) {
     return <div className="p-8 text-center text-slate-400">جارٍ التحميل…</div>;
@@ -52,7 +53,9 @@ export default function Receipt() {
         <Link to={ids.length === 1 ? `/tickets/${ids[0]}` : "/"} className="btn-ghost flex-1">
           {ids.length === 1 ? "التذكرة" : "الرئيسية"}
         </Link>
-        <button type="button" onClick={print} className="btn-primary flex-1">طباعة</button>
+        <button type="button" onClick={() => window.print()} disabled={!imagesReady} className="btn-primary flex-1">
+          {imagesReady ? "طباعة" : "جارٍ تحميل الصور…"}
+        </button>
       </div>
 
       {ids.length > 1 && (
