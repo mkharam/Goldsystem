@@ -43,6 +43,28 @@ export default function Receipt() {
     return () => window.clearInterval(t);
   }, []);
 
+  // تطبيق آيفون المثبَّت على الشاشة الرئيسية يتجاهل window.print() تماماً (خلل في iOS)، بينما يعمل
+  // في سفاري. فيه نفتح نفس الإيصال في سفاري مع ?print=1، وهناك يطبع تلقائياً بعد تحميل الصور.
+  const iosApp = (navigator as Navigator & { standalone?: boolean }).standalone === true;
+  const autoPrint = params.get("print") === "1";
+  const [autoPrinted, setAutoPrinted] = useState(false);
+  useEffect(() => {
+    if (autoPrint && imagesReady && !autoPrinted && !iosApp) {
+      setAutoPrinted(true);
+      setTimeout(() => window.print(), 300);
+    }
+  }, [autoPrint, imagesReady, autoPrinted, iosApp]);
+
+  function printClick() {
+    if (iosApp) {
+      const url = new URL(window.location.href);
+      url.searchParams.set("print", "1");
+      window.open(url.toString(), "_blank");
+      return;
+    }
+    window.print();
+  }
+
   if (!settings || ids.length === 0) {
     return <div className="p-8 text-center text-slate-400">جارٍ التحميل…</div>;
   }
@@ -53,7 +75,7 @@ export default function Receipt() {
         <Link to={ids.length === 1 ? `/tickets/${ids[0]}` : "/"} className="btn-ghost flex-1">
           {ids.length === 1 ? "التذكرة" : "الرئيسية"}
         </Link>
-        <button type="button" onClick={() => window.print()} disabled={!imagesReady} className="btn-primary flex-1">
+        <button type="button" onClick={printClick} disabled={!imagesReady} className="btn-primary flex-1">
           {imagesReady ? "طباعة" : "جارٍ تحميل الصور…"}
         </button>
       </div>
