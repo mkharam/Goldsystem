@@ -6,6 +6,7 @@ import { uploadTicketPhoto } from "@/lib/photos";
 import { useAuth } from "@/lib/auth";
 import { OPEN_STATUSES, normalizeDigits } from "@/lib/constants";
 import { formatDateTime, formatWeight, formatMoney } from "@/lib/format";
+import { isIosStandalone, renderReceiptFiles } from "@/lib/shareReceipt";
 import { qrSvg, trackingUrl } from "@/lib/qr";
 import { Logo } from "@/components/Logo";
 import type { TicketWithRelations, RepairPhoto } from "@/lib/types";
@@ -43,26 +44,49 @@ export default function Receipt() {
     return () => window.clearInterval(t);
   }, []);
 
-  // تطبيق آيفون المثبَّت على الشاشة الرئيسية يتجاهل window.print() تماماً (خلل في iOS)، بينما يعمل
-  // في سفاري. فيه نفتح نفس الإيصال في سفاري مع ?print=1، وهناك يطبع تلقائياً بعد تحميل الصور.
-  const iosApp = (navigator as Navigator & { standalone?: boolean }).standalone === true;
-  const autoPrint = params.get("print") === "1";
-  const [autoPrinted, setAutoPrinted] = useState(false);
+  // تطبيق آيفون المثبَّت يتجاهل window.print()؛ فيه زر الطباعة يفتح قائمة المشاركة بصورة الإيصال
+  // ومنها «طباعة». الصورة تُجهَّز مسبقاً وتُعاد عند أي تعديل على الإيصال.
+  const iosApp = isIosStandalone();
+  const [shareFiles, setShareFiles] = useState<File[] | null>(null);
+  const [shareMsg, setShareMsg] = useState<string | null>(null);
   useEffect(() => {
-    if (autoPrint && imagesReady && !autoPrinted && !iosApp) {
-      setAutoPrinted(true);
-      setTimeout(() => window.print(), 300);
-    }
-  }, [autoPrint, imagesReady, autoPrinted, iosApp]);
+    if (!iosApp || !imagesReady) return;
+    let alive = true;
+    let timer = 0;
+    const render = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(async () => {
+        try {
+          observer.disconnect();
+          const files = await renderReceiptFiles();
+          if (alive) setShareFiles(files.length ? files : null);
+        } catch (e) {
+          console.error("receipt render failed", e);
+        } finally {
+          if (alive) observe();
+        }
+      }, 700);
+    };
+    const observer = new MutationObserver(() => { setShareFiles(null); render(); });
+    const observe = () => document.querySelectorAll(".a5-sheet").forEach((el) =>
+      observer.observe(el, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ["src"] }));
+    render();
+    return () => { alive = false; window.clearTimeout(timer); observer.disconnect(); };
+  }, [iosApp, imagesReady]);
 
-  function printClick() {
-    if (iosApp) {
-      const url = new URL(window.location.href);
-      url.searchParams.set("print", "1");
-      window.open(url.toString(), "_blank");
+  async function printClick() {
+    if (!iosApp) {
+      window.print();
       return;
     }
-    window.print();
+    if (!shareFiles) return;
+    setShareMsg(null);
+    try {
+      if (navigator.canShare && !navigator.canShare({ files: shareFiles })) throw new Error("no-share");
+      await navigator.share({ files: shareFiles, title: "إيصال" });
+    } catch (e) {
+      if ((e as Error).name !== "AbortError") setShareMsg("تعذّر فتح المشاركة — حاول مرة أخرى");
+    }
   }
 
   if (!settings || ids.length === 0) {
@@ -75,10 +99,12 @@ export default function Receipt() {
         <Link to={ids.length === 1 ? `/tickets/${ids[0]}` : "/"} className="btn-ghost flex-1">
           {ids.length === 1 ? "التذكرة" : "الرئيسية"}
         </Link>
-        <button type="button" onClick={printClick} disabled={!imagesReady} className="btn-primary flex-1">
-          {imagesReady ? "طباعة" : "جارٍ تحميل الصور…"}
+        <button type="button" onClick={printClick} disabled={!imagesReady || (iosApp && !shareFiles)} className="btn-primary flex-1">
+          {!imagesReady ? "جارٍ تحميل الصور…" : iosApp && !shareFiles ? "جارٍ التجهيز…" : "طباعة"}
         </button>
       </div>
+
+      {shareMsg && <p className="no-print mx-auto mb-3 max-w-[446px] px-4 text-center text-xs text-red-600">{shareMsg}</p>}
 
       {ids.length > 1 && (
         <label className="no-print mx-auto mb-4 flex max-w-[446px] items-center gap-2 px-4 text-sm text-slate-600">
