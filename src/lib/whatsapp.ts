@@ -111,3 +111,38 @@ export function askRepairman(ticket: TicketWithRelations, phone: string = REPAIR
   }
   return true;
 }
+
+/** قائمة القطع المرسلة للفني قبل أن يأتي للمحل: كل قطعة بالعمل المطلوب ورابط صورها. */
+export function buildTechListMessage(tickets: TicketWithRelations[], branchName?: string): string {
+  const lines = tickets.map((t, i) => {
+    const details = [t.karat, t.weight_in_grams !== null ? formatWeight(t.weight_in_grams) : null].filter(Boolean).join(" · ");
+    const work = t.problem_description.replace(/\s+/g, " ").trim().slice(0, 160);
+    return [
+      `${i + 1}) ${t.item_name}${details ? ` (${details})` : ""} — تذكرة ${t.ticket_number}`,
+      `   المطلوب: ${work}`,
+      `   الصور: ${trackingUrl(t.tracking_token)}`,
+    ].join("\n");
+  });
+  return [
+    `السلام عليكم، قطع الصيانة الجاهزة للاستلام${branchName ? ` من ${branchName}` : ""} (${tickets.length}):`,
+    "",
+    ...lines,
+  ].join("\n");
+}
+
+/** يفتح محادثة الفني بنص جاهز (برنامج واتساب على الحاسوب، التطبيق على الهاتف). */
+export function openRepairmanChat(text: string, phone: string = REPAIRMAN_PHONE): boolean {
+  const number = whatsappNumber(phone);
+  if (!number) return false;
+  const t = encodeURIComponent(text);
+  if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+    window.open(`https://wa.me/${number}?text=${t}`, "_blank", "noopener");
+  } else {
+    const a = document.createElement("a");
+    a.href = `whatsapp://send?phone=${number}&text=${t}`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+  return true;
+}

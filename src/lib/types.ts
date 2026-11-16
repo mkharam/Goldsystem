@@ -57,6 +57,7 @@ export type RepairTicket = {
   status: RepairStatus;
   received_at: string;
   promised_at: string | null;
+  sent_to_tech_at?: string | null;
   ready_at: string | null;
   delivered_at: string | null;
   cancelled_at: string | null;

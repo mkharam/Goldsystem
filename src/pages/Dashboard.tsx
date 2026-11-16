@@ -245,6 +245,13 @@ export default function Dashboard() {
             );
           })}
 
+          {/* قائمة القطع للفني قبل أن يأتي للمحل. */}
+          <Link
+            to="/tech"
+            className="flex items-center gap-1.5 whitespace-nowrap rounded-full border border-gold-400 bg-gold-50 px-3 py-1.5 text-sm font-semibold text-brand-800 transition active:scale-95"
+          >
+            إرسال للفني
+          </Link>
           {/* المسلّمة خارج هذه القائمة — لها صفحتها الخاصة، تُفتح من هنا. */}
           <Link
             to="/delivered"
