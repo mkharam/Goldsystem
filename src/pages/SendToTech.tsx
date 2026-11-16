@@ -7,6 +7,7 @@ import { supabase } from "@/lib/supabase";
 import { buildTechListMessage, openRepairmanChat, REPAIRMAN_PHONE } from "@/lib/whatsapp";
 import { formatWeight, formatDateTime } from "@/lib/format";
 import { useToast } from "@/lib/toast";
+import { invalidateAttention } from "@/lib/attention";
 import type { TicketWithRelations } from "@/lib/types";
 
 /**
@@ -22,7 +23,13 @@ export default function SendToTech() {
   const [tickets, setTickets] = useState<TicketWithRelations[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [showSent, setShowSent] = useState(false);
+  // كل فرع له فنيه: الرقم من الفرع (branches.tech_phone)، وإلا الرقم العام من الإعدادات.
   const [phone, setPhone] = useState(REPAIRMAN_PHONE);
+  const [defaultPhone, setDefaultPhone] = useState(REPAIRMAN_PHONE);
+  const [branchPhone, setBranchPhone] = useState<string | null>(null);
+  const [editPhone, setEditPhone] = useState<string | null>(null);
+  // الفرع الفعلي للإرسال: فرع الموظف، أو المختار عند المدير. «كل الفروع» لا يحدد فنياً.
+  const techBranchId = branch === "all" ? null : branch;
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const branchId = branch === "all" ? undefined : branch;
@@ -33,7 +40,15 @@ export default function SendToTech() {
       listTickets({ status: "received", branchId, newest: false, limit: 200 }),
       getSettings(),
     ]);
-    setPhone(settings.repairman_phone || REPAIRMAN_PHONE);
+    const fallback = settings.repairman_phone || REPAIRMAN_PHONE;
+    setDefaultPhone(fallback);
+    let own: string | null = null;
+    if (techBranchId) {
+      const { data } = await supabase.from("branches").select("tech_phone").eq("id", techBranchId).maybeSingle();
+      own = (data as { tech_phone?: string | null } | null)?.tech_phone ?? null;
+    }
+    setBranchPhone(own);
+    setPhone(own || fallback);
     setTickets(rows);
     // افتراضياً: كل ما لم يُرسل بعد محدد.
     setSelected(new Set(rows.filter((t) => !t.sent_to_tech_at).map((t) => t.id)));
@@ -52,10 +67,22 @@ export default function SendToTech() {
 
   const markSent = async () => {
     await supabase.rpc("mark_sent_to_tech", { p_ids: chosen.map((t) => t.id) });
+    invalidateAttention();
     void load();
   };
 
   const branchName = branchId ? branches.find((b) => b.id === branchId)?.name : undefined;
+
+  async function savePhone() {
+    if (!techBranchId || editPhone === null) return;
+    const { error } = await supabase.rpc("set_branch_tech_phone", { p_branch_id: techBranchId, p_phone: editPhone });
+    if (error) return toast("تعذّر حفظ الرقم", "error");
+    const v = editPhone.trim() || null;
+    setBranchPhone(v);
+    setPhone(v || defaultPhone);
+    setEditPhone(null);
+    toast("تم حفظ رقم فني الفرع");
+  }
 
   // الهاتف: الصور نفسها + النص عبر المشاركة (واتساب يرسلها كألبوم والنص معها).
   async function shareWithPhotos() {
@@ -97,6 +124,29 @@ export default function SendToTech() {
       <p className="mb-3 text-sm text-slate-500">القطع المستلمة التي تحتاج الفني — يعرف ما عنده قبل أن يأتي للمحل.</p>
 
       {staff?.role === "admin" && <BranchPicker branches={branches} value={branch} onChange={setBranch} />}
+
+      <div className="card mb-3 flex items-center gap-2 p-3 text-sm">
+        {editPhone === null ? (
+          <>
+            <span className="text-slate-500">فني {branchName ?? "الفرع"}:</span>
+            <span dir="ltr" className="font-bold tabular-nums">{phone}</span>
+            {!branchPhone && techBranchId && <span className="text-xs text-slate-400">(الرقم العام)</span>}
+            <span className="flex-1" />
+            {techBranchId ? (
+              <button onClick={() => setEditPhone(branchPhone ?? "")} className="text-xs font-semibold text-brand-700">تغيير</button>
+            ) : (
+              <span className="text-xs text-slate-400">اختر فرعاً لتحديد فنيه</span>
+            )}
+          </>
+        ) : (
+          <>
+            <input dir="ltr" inputMode="tel" autoFocus value={editPhone} onChange={(e) => setEditPhone(e.target.value)}
+              placeholder={defaultPhone} className="field h-9 flex-1 text-sm" />
+            <button onClick={() => void savePhone()} className="btn-primary h-9 px-3 text-sm">حفظ</button>
+            <button onClick={() => setEditPhone(null)} className="text-xs text-slate-500">إلغاء</button>
+          </>
+        )}
+      </div>
 
       <div className="mb-3 flex items-center gap-2 text-sm">
         <button onClick={() => setShowSent(false)} className={`rounded-full border px-3 py-1.5 ${!showSent ? "border-brand-700 bg-brand-700 text-white" : "bg-white"}`}>

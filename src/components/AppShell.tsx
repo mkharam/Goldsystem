@@ -1,5 +1,6 @@
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
+import { useAttention } from "@/lib/attention";
 import { Logo } from "./Logo";
 import { useTheme } from "@/lib/theme";
 
@@ -53,7 +54,10 @@ export function AppShell({
   const onHome = pathname === "/";
   const onNew = pathname === "/tickets/new";
   const onCalendar = pathname === "/calendar";
-  const onNotify = pathname === "/notify";
+  const onNotify = pathname === "/notify" || pathname === "/tech";
+  // شارة حمراء: ما يحتاج تبليغ الزبون + قطع لم تُرسل للفني.
+  const attention = useAttention();
+  const attentionTotal = attention.notify + attention.tech;
   const [theme, toggleTheme] = useTheme();
 
   return (
@@ -137,7 +141,14 @@ export function AppShell({
               onNotify ? "bg-white/10 text-gold-200 ring-1 ring-gold-500/40" : "text-gold-100/55"
             }`}
           >
-            <BellIcon active={onNotify} />
+            <span className="relative">
+              <BellIcon active={onNotify} />
+              {attentionTotal > 0 && (
+                <span className="absolute -right-2.5 -top-2 min-w-[18px] rounded-full bg-red-600 px-1 text-center text-[11px] font-bold leading-[18px] text-white ring-2 ring-brand-950">
+                  {attentionTotal > 99 ? "99+" : attentionTotal}
+                </span>
+              )}
+            </span>
             <span className={`text-xs ${onNotify ? "font-bold" : "font-medium"}`}>إبلاغ</span>
           </Link>
 

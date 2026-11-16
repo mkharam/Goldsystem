@@ -9,6 +9,8 @@ import { getSettings, listTickets } from "@/lib/tickets";
 import { supabase } from "@/lib/supabase";
 import { notifyCustomer } from "@/lib/whatsapp";
 import { useToast } from "@/lib/toast";
+import { Link } from "react-router-dom";
+import { useAttention, invalidateAttention } from "@/lib/attention";
 import type { TicketWithRelations } from "@/lib/types";
 
 type TabKey = "needs" | "notified" | "all";
@@ -38,6 +40,7 @@ export default function Notify() {
     setParams(next, { replace: true });
   };
 
+  const { tech } = useAttention();
   const [tickets, setTickets] = useState<TicketWithRelations[]>([]);
   const [lastNotified, setLastNotified] = useState<Record<string, string>>({});
   const [reminderDays, setReminderDays] = useState(3);
@@ -96,7 +99,20 @@ export default function Notify() {
 
   return (
     <AppShell>
-      <h1 className="mb-3 text-lg font-bold text-slate-900">إبلاغ الزبون</h1>
+      <h1 className="mb-3 text-lg font-bold text-slate-900">إبلاغ</h1>
+
+      {/* إرسال القطع للفني — هنا لأنها تذكير يومي مثل تبليغ الزبون. */}
+      <Link to="/tech" className="card mb-4 flex items-center gap-3 border-gold-300 bg-gold-50/60 p-3 active:scale-[0.99]">
+        <span className="flex size-10 items-center justify-center rounded-full bg-brand-800 text-lg text-gold-200">🛠</span>
+        <span className="flex-1">
+          <span className="block font-bold text-slate-900">إرسال القطع للفني</span>
+          <span className="block text-xs text-slate-500">القطع المستلمة اللي الفني ما يعرفش عليها لسه</span>
+        </span>
+        {tech > 0 && <span className="min-w-[24px] rounded-full bg-red-600 px-2 py-0.5 text-center text-sm font-bold text-white">{tech}</span>}
+        <span className="text-slate-400">←</span>
+      </Link>
+
+      <h2 className="mb-2 text-base font-bold text-slate-900">إبلاغ الزبون</h2>
 
       {error && <p className="mb-4 rounded-lg bg-red-50 px-3 py-2.5 text-sm text-red-700">{error}</p>}
 
@@ -119,7 +135,8 @@ export default function Notify() {
             >
               {t.label}
               <span className={`min-w-5 rounded-full px-1.5 text-center text-xs tabular-nums ${
-                active ? "bg-white/15 text-gold-100" : "bg-slate-100 text-slate-600"
+                t.key === "needs" && n > 0 ? "bg-red-600 font-bold text-white"
+                  : active ? "bg-white/15 text-gold-100" : "bg-slate-100 text-slate-600"
               }`}>
                 {n}
               </span>
@@ -153,6 +170,7 @@ export default function Notify() {
                   const ok = await notifyCustomer(t, kind, shopName, staff.staff_id);
                   if (!ok) return toast("رقم الزبون غير صالح", "error");
                   setLastNotified((m) => ({ ...m, [t.id]: new Date().toISOString() }));
+                  invalidateAttention();
                 }}
               />
             </div>
